@@ -1,0 +1,9 @@
+db/
+dist/
+node_modules/
+
+postgres_data/
+rabbitmq_data/
+redis_data/
+
+.env

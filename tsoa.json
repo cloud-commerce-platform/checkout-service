@@ -1,0 +1,31 @@
+{
+  "entryFile": "src/index.ts",
+  "noImplicitAdditionalProperties": "throw-on-extras",
+  "controllerPathGlobs": ["src/infrastructure/rest-api/controllers/*Controller.ts"],
+  "aditinalProperties": false,
+  "spec": {
+    "outputDirectory": "src/infrastructure/rest-api",
+    "specVersion": 3,
+    "spec": {
+      "servers": [
+        {
+          "url": "http://localhost:3000",
+          "description": "Development server"
+        }
+      ]
+    }
+  },
+  "routes": {
+    "routesDir": "src/infrastructure/rest-api"
+  },
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@domain/*": ["src/domain/*"],
+      "@application/*": ["src/application/*"],
+      "@infrastructure/*": ["src/infrastructure/*"],
+      "@shared/*": ["src/shared/*"]
+    }
+  }
+}

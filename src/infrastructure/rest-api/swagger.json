@@ -1,0 +1,126 @@
+{
+	"components": {
+		"examples": {},
+		"headers": {},
+		"parameters": {},
+		"requestBodies": {},
+		"responses": {},
+		"schemas": {
+			"UUID": {
+				"type": "string",
+				"example": "01234567-89ab-7def-8012-3456789abcde",
+				"format": "uuid",
+				"description": "Stringified UUIDv7.",
+				"pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+			},
+			"ItemRequest": {
+				"properties": {
+					"productId": {
+						"$ref": "#/components/schemas/UUID"
+					},
+					"quantity": {
+						"type": "number",
+						"format": "double"
+					},
+					"unitPrice": {
+						"type": "number",
+						"format": "double"
+					}
+				},
+				"required": [
+					"productId",
+					"quantity",
+					"unitPrice"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CreateOrderRequest": {
+				"properties": {
+					"customerId": {
+						"$ref": "#/components/schemas/UUID"
+					},
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/ItemRequest"
+						},
+						"type": "array"
+					}
+				},
+				"required": [
+					"customerId",
+					"items"
+				],
+				"type": "object",
+				"additionalProperties": false
+			}
+		},
+		"securitySchemes": {}
+	},
+	"info": {
+		"title": "order-service",
+		"version": "1.0.0",
+		"description": "Order service handling orders with hexagonal architecture",
+		"license": {
+			"name": "MIT"
+		},
+		"contact": {}
+	},
+	"openapi": "3.0.0",
+	"paths": {
+		"/orders": {
+			"post": {
+				"operationId": "CreateOrder",
+				"responses": {
+					"201": {
+						"description": "Created"
+					}
+				},
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CreateOrderRequest"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/orders/{id}": {
+			"get": {
+				"operationId": "GetOrderById",
+				"responses": {
+					"200": {
+						"description": "Found",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				]
+			}
+		}
+	},
+	"servers": [
+		{
+			"url": "http://localhost:3000",
+			"description": "Development server"
+		}
+	]
+}

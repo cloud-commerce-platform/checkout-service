@@ -1,0 +1,13 @@
+node_modules
+dist
+
+postgres_data
+rabbitmq_data
+redis_data
+
+*.log
+
+.env
+.git
+.gitignore
+
