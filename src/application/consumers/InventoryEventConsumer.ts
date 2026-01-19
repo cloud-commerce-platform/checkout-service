@@ -21,7 +21,6 @@ export class InventoryEventConsumer extends BaseEventConsumer {
 			async (message: IncomingIntegrationEvent<IncomingInventoryEvent>) => {
 				try {
 					switch (message.eventType) {
-
 						case "INVENTORY_RESERVED":
 							await this.handleReservationConfirmed(
 								message as IncomingIntegrationEvent<InventoryReservationConfirmedEvent>

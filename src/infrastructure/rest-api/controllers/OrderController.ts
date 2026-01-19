@@ -1,13 +1,7 @@
 import type { OrderService } from "@application/services/OrderService";
 import { Body, Controller, Get, Path, Post, Route, SuccessResponse } from "@tsoa/runtime";
 import { Type } from "class-transformer";
-import {
-	IsArray,
-	IsNotEmpty,
-	IsNumber,
-	IsUUID,
-	ValidateNested,
-} from "class-validator";
+import { IsArray, IsNotEmpty, IsNumber, IsUUID, ValidateNested } from "class-validator";
 import { orderService } from "@/globals";
 import type { UUID } from "@/infrastructure/utils";
 
@@ -36,6 +30,7 @@ export class CreateOrderRequest {
 	items!: ItemRequest[];
 }
 
+
 @Route("orders")
 export class OrderController extends Controller {
 	private readonly orderService: OrderService;
@@ -48,7 +43,7 @@ export class OrderController extends Controller {
 	@Post()
 	@SuccessResponse(201, "Created")
 	public async createOrder(@Body() body: CreateOrderRequest): Promise<void> {
-		await this.orderService.createOrder(body);
+		return this.orderService.createOrder(body);
 	}
 
 	@Get("{id}")

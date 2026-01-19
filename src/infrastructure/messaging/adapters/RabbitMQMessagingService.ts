@@ -34,21 +34,29 @@ export class RabbitMQMessagingService implements MessagingService {
 		if (!this.channel) {
 			throw new Error("RabbitMQ channel is not available.");
 		}
-		await this.channel.assertExchange(exchange, "topic", { durable: false });
-		console.log(
-			"RabbitMQ. Evento publicado:",
-			JSON.stringify(
-				{
-					exchange,
-					routingKey,
-					message,
-				},
-				null,
-				2
-			)
-		);
+		try {
+			await this.channel.assertExchange(exchange, "topic", { durable: false });
+			console.log(
+				"RabbitMQ. Evento publicado:",
+				JSON.stringify(
+					{
+						exchange,
+						routingKey,
+						message,
+					},
+					null,
+					2
+				)
+			);
 
-		this.channel.publish(exchange, routingKey, Buffer.from(JSON.stringify(message)));
+			this.channel.publish(exchange, routingKey, Buffer.from(JSON.stringify(message)));
+		} catch (error) {
+			console.error("ERROR_PUBLISHING_EVENT", {
+				to_exchange: exchange,
+				to_routingKey: routingKey,
+				error,
+			});
+		}
 	}
 
 	async subscribe<T = any>(
@@ -84,7 +92,11 @@ export class RabbitMQMessagingService implements MessagingService {
 					handler(content);
 					this.channel?.ack(msg);
 				} catch (error) {
-					console.error("Error processing message:", error);
+					console.error("ERROR_PROCESING_EVENT:", {
+						from_exchange: exchange,
+						from_routingKey: routingKey,
+						error,
+					});
 					this.channel?.nack(msg, false, false);
 				}
 			}

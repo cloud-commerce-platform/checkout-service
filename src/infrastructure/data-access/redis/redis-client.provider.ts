@@ -1,5 +1,5 @@
-import { createClient, type RedisClientType } from "redis";
 import dotenv from "dotenv";
+import { createClient, type RedisClientType } from "redis";
 
 dotenv.config();
 
