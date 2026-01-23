@@ -4,7 +4,7 @@ export interface MessagingService {
 	subscribe(
 		exchange: string,
 		queue: string,
-		routingKey: string,
+		routingKeys: string[],
 		handler: (message: any) => void
 	): void;
 }

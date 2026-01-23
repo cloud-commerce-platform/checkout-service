@@ -54,7 +54,7 @@ export class RabbitMQMessagingService implements MessagingService {
 			console.error("ERROR_PUBLISHING_EVENT", {
 				to_exchange: exchange,
 				to_routingKey: routingKey,
-				error,
+				error: error instanceof Error ? error.message : "Unkown Error",
 			});
 		}
 	}
@@ -62,7 +62,7 @@ export class RabbitMQMessagingService implements MessagingService {
 	async subscribe<T = any>(
 		exchange: string,
 		queue: string,
-		routingKey: string,
+		routingKeys: string[],
 		handler: (message: T) => void
 	): Promise<void> {
 		if (!this.channel) {
@@ -71,7 +71,9 @@ export class RabbitMQMessagingService implements MessagingService {
 		await this.channel.assertExchange(exchange, "topic", { durable: false });
 		await this.channel.assertQueue(queue, { durable: false });
 
-		await this.channel.bindQueue(queue, exchange, routingKey);
+		for (const routingKey of routingKeys) {
+			await this.channel.bindQueue(queue, exchange, routingKey);
+		}
 
 		this.channel.consume(queue, (msg) => {
 			if (msg) {
@@ -82,7 +84,7 @@ export class RabbitMQMessagingService implements MessagingService {
 						JSON.stringify(
 							{
 								exchange,
-								routingKey,
+								routingKeys,
 								content,
 							},
 							null,
@@ -94,8 +96,8 @@ export class RabbitMQMessagingService implements MessagingService {
 				} catch (error) {
 					console.error("ERROR_PROCESING_EVENT:", {
 						from_exchange: exchange,
-						from_routingKey: routingKey,
-						error,
+						from_routingKey: routingKeys,
+						error: error instanceof Error ? error.message : "Unkown Error",
 					});
 					this.channel?.nack(msg, false, false);
 				}

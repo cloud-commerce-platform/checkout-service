@@ -30,7 +30,6 @@ export class CreateOrderRequest {
 	items!: ItemRequest[];
 }
 
-
 @Route("orders")
 export class OrderController extends Controller {
 	private readonly orderService: OrderService;

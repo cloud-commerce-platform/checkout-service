@@ -17,33 +17,36 @@ export class UpdateOrderStatusUseCase {
 		orderStatus: OrderStatus
 	): Promise<Order> {
 		return await this.transactionManager.runInTransaction(async () => {
-			const { payload } = eventMessage;
 
-			const order = await this.orderRepository.findById(payload.orderId);
+			const order = await this.orderRepository.findById(eventMessage.payload.orderId);
 			if (!order) {
 				throw new Error("ORDER_NOT_FOUND");
 			}
 
-			switch (payload.type) {
+			// NO existe type en el payload de llegada
+			switch (eventMessage.payload.type) {
 				case "INVENTORY_RESERVATION_COMPLETED":
 					break;
 
 				case "INVENTORY_RESERVATION_FAILED":
 					order.transitionTo(orderStatus, {
 						reason: "MANUAL_STATUS_UPDATE",
-						cancelationReason: payload.reason,
+						cancelationReason: eventMessage.payload.reason,
 					});
 					break;
 
-				case "PAYMENT_CHECKING_COMPLETED":
+				case "PAYMENT_FAILED":
+					order.transitionTo(orderStatus, {
+						reason: "MANUAL_STATUS_UPDATE",
+						cancelationReason: eventMessage.payload.reason,
+					});
 					break;
 
-				case "PAYMENT_CHECKING_FAILED":
+				case "PAYMENT_COMPLETED":
 					break;
 			}
 
 			await this.orderRepository.update(order);
-			console.log(order);
 			return order;
 		});
 	}

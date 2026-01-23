@@ -10,6 +10,7 @@ import type { CreateOrderUseCase } from "../use-cases/CreateOrderUseCase";
 import type { GetOrderByIdUseCase } from "../use-cases/GetOrderByIdUseCase";
 import type { GetOrdersByCustomerIdUseCase } from "../use-cases/GetOrdersByCustomerIdUseCase";
 import type { UpdateOrderStatusUseCase } from "../use-cases/UpdateOrderStatusUseCase";
+import { PaymentCheckingFailedEvent } from "../consumers/types/PaymentEvents";
 
 export class OrderService {
 	constructor(
@@ -78,38 +79,26 @@ export class OrderService {
 			return;
 		}
 
+		console.log("[Order-Status]: ", orderStatus);
 		const { payment: paymentStatus, inventory: inventoryStatus } = orderStatus;
-		if (paymentStatus == "rejected" && inventoryStatus == "reserved") {
-			// to-do: Hacer rollback reservation
-			return;
-		}
 
-		if (paymentStatus == "rejected") {
-			await this.updateOrderStatus(eventMessage, OrderStatus.CANCELLED);
+		if (paymentStatus === "rejected" || inventoryStatus === "unavailable") {
+			if (paymentStatus === "rejected" && inventoryStatus === "reserved") {
+				await this.updateOrderStatus(eventMessage, OrderStatus.CANCELLED);
+				// TODO: rollback inventory
+			}
+
+			if (paymentStatus === "approved" && inventoryStatus === "unavailable") {
+				await this.updateOrderStatus<T>(eventMessage, OrderStatus.CANCELLED);
+				// TODO: rollback payment
+			}
+
 			await this.orderCheckRepository.delete(orderId);
 			return;
 		}
 
-		// No deberiamos hacer un rollback de payment, solo
-		// verificamos que sea un cliente autentico
-		// PaymentStatus solo checkea, no cobra
-
-		if (inventoryStatus == "unavailable") {
-			await this.updateOrderStatus(eventMessage, OrderStatus.CANCELLED);
-			await this.orderCheckRepository.delete(orderId);
-			return;
-		}
-
-		if (paymentStatus === "approved" && inventoryStatus === "pending") {
-			return;
-		}
-
-		if (inventoryStatus === "reserved" && paymentStatus === "pending") {
-			return;
-		}
-
-		if (paymentStatus == "approved" && inventoryStatus == "reserved") {
-			await this.updateOrderStatus(eventMessage, OrderStatus.CONFIRMED);
+		if (paymentStatus === "approved" && inventoryStatus === "reserved") {
+			await this.updateOrderStatus<T>(eventMessage, OrderStatus.CONFIRMED);
 			await this.orderCheckRepository.delete(orderId);
 			return;
 		}

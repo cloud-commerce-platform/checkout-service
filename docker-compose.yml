@@ -21,12 +21,25 @@ services:
     depends_on:
       - rabbitmq
 
+  order-postgres:
+    image: postgres:15-alpine
+    container_name: order-service-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+
   order-dbmate:
     image: "ghcr.io/amacneil/dbmate:latest"
     container_name: order-service-dbmate
     environment:
-      DATABASE_URL: ${DEV_DATABASE_URL} 
+      DATABASE_URL: postgresql://postgres:postgres@order-postgres:5432/postgres?sslmode=disable
     volumes:
       - ./db/migrations:/db/migrations
-    command: "up"
-
+    command: -d db/migrations/ up
+    depends_on:
+      - order-postgres

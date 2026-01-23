@@ -11,7 +11,7 @@ export class InventoryEventConsumer extends BaseEventConsumer {
 		const { exchange, queue, routingKey } = this.setUpEventConfig(
 			"inventory_events",
 			"order_service_inventory_queue",
-			"inventory.reservation.response"
+			["inventory.reservation.response"]
 		);
 
 		this.messagingService.subscribe(

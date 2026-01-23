@@ -11,7 +11,7 @@ export class PaymentEventConsumer extends BaseEventConsumer {
 		const { exchange, queue, routingKey } = this.setUpEventConfig(
 			"payment_events",
 			"order_service_payment_queue",
-			"payment.verification.response"
+			["payment.verification.verified", "payment.verification.failed"]
 		);
 
 		this.messagingService.subscribe(

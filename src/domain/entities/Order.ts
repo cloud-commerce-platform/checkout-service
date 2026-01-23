@@ -89,13 +89,12 @@ export class Order extends Entity<OrderDomainEvent> {
 		const previousStatus = this.status;
 		this.setStatus(newStatus);
 
-		this.addSpecificEvents(newStatus, previousStatus, details);
+		this.addSpecificEvents(newStatus, details);
 	}
 
 	//CAMBIAR oldStatus
 	private addSpecificEvents(
 		newStatus: OrderStatus,
-		_: OrderStatus,
 		details?: { reason?: string; cancelationReason?: CancellationReason }
 	): void {
 		if (newStatus === OrderStatus.CONFIRMED) {
@@ -127,22 +126,22 @@ export class Order extends Entity<OrderDomainEvent> {
 			});
 		}
 
-		if (
-			newStatus === OrderStatus.CANCELLED &&
-			details?.cancelationReason === CancellationReason.PAYMENT_FAILED
-		) {
-			this.addDomainEvent({
-				type: "ORDER_PAYMENT_VERIFICATION_FAILED",
-				timestamp: new Date(),
-				aggregateId: this.getId(),
-				aggregateType: "Order",
-				data: {
-					orderId: this.getId(),
-					reason: CancellationReason.PAYMENT_FAILED,
-					details: details.reason ?? "Tarjeta declinada por fondos insuficientes",
-				},
-			});
-		}
+    if (
+      newStatus === OrderStatus.CANCELLED &&
+      details?.cancelationReason === CancellationReason.PAYMENT_FAILED
+    ) {
+      this.addDomainEvent({
+        type: "PAYMENT_ROLLBACK_REQUESTED",
+        timestamp: new Date(),
+        aggregateId: this.getId(),
+        aggregateType: "Order",
+        data: {
+          orderId: this.getId(),
+        },
+      });
+    }
+
+
 		/*
         if (
           newStatus === OrderStatus.CANCELLED &&

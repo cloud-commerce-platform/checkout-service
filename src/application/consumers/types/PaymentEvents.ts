@@ -1,10 +1,13 @@
+import { CancellationReason } from "@alejotamayo28/event-contracts";
+
 export interface PaymentCheckingConfirmedEvent {
-	type: "PAYMENT_CHECKING_COMPLETED";
+	type: "PAYMENT_COMPLETED";
 	orderId: string;
 }
 export interface PaymentCheckingFailedEvent {
-	type: "PAYMENT_CHECKING_FAILED";
+	type: "PAYMENT_FAILED";
 	orderId: string;
+  reason: CancellationReason
 }
 
 export type IncomingPaymentEvent =

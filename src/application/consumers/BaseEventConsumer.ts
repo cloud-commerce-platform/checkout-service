@@ -4,7 +4,7 @@ import type { OrderService } from "@application/services/OrderService";
 interface boundEvent {
 	exchange: string;
 	queue: string;
-	routingKey: string;
+	routingKey: string[];
 }
 
 export abstract class BaseEventConsumer {
@@ -21,7 +21,7 @@ export abstract class BaseEventConsumer {
 	protected setUpEventConfig(
 		exchange: string,
 		queue: string,
-		routingKey: string
+		routingKey: string[]
 	): boundEvent {
 		return {
 			exchange,

@@ -12,8 +12,10 @@ async function start() {
 	try {
 		const messagingService = new RabbitMQMessagingService();
 
-		// Connect to RabbitMQ with retry
-		const MAX_RETRIES = 10;
+		//console.log("Waiting 10 seconds before connecting to RabbitMQ...");
+		//await new Promise((resolve) => setTimeout(resolve, 10000));
+
+		const MAX_RETRIES = 15;
 		let retries = 0;
 		while (retries < MAX_RETRIES) {
 			await messagingService.connect();

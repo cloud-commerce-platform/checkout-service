@@ -43,12 +43,6 @@ export interface OrderCompletedPayload {
 	deliveryDetails?: Record<string, any>;
 }
 
-export interface PaymentVerificationFailedPayload {
-	orderId: string;
-	reason: CancellationReason.PAYMENT_FAILED;
-	details: string;
-}
-
 export interface InventoryReservationFailedPayload {
 	orderId: string;
 	reason:
@@ -57,31 +51,10 @@ export interface InventoryReservationFailedPayload {
 	unavailableItems: { itemId: string }[];
 }
 
-export interface InventoryDeductRequestedPayload {
-	orderId: string;
-	items: {
-		productId: string;
-		quantity: number;
-	}[];
-	deductFromReservation?: boolean;
-}
 
 export interface InventoryReservationCompletedPayload {
 	orderId: string;
 	reservationId: string;
-}
-
-export interface PaymentCaptureRequestedPayload {
-	orderId: string;
-	amount: number;
-	currency: string;
-	paymentMethod: string;
-	customerId: string;
-	billingDetails?: {
-		name: string;
-		email: string;
-		address?: string;
-	};
 }
 
 export interface InventoryRollbackRequestedPayload {
@@ -95,58 +68,34 @@ export interface InventoryRollbackRequestedPayload {
 
 export interface PaymentRefundRequestedPayload {
 	orderId: string;
-	refundAmount: number;
-	currency: string;
-	refundReason: string;
-	originalTransactionId?: string;
 }
 
+// Creamos orden
 export type OrderCreatedEvent = DomainEvent<
 	OrderCreatedPayload,
 	"Order",
 	"ORDER_CREATED"
 >;
 
+// Confirma inventory y payment
 export type OrderConfirmedEvent = DomainEvent<
 	OrderConfirmedPayload,
 	"Order",
 	"ORDER_CONFIRMED"
 >;
 
+// Cancelamos orden
 export type OrderCancelledEvent = DomainEvent<
 	OrderCancelledPayload,
 	"Order",
 	"ORDER_CANCELLED"
 >;
 
+// Orden finalizada 
 export type OrderCompletedEvent = DomainEvent<
 	OrderCompletedPayload,
 	"Order",
 	"ORDER_COMPLETED"
->;
-
-export type PaymentVerificationFailedEvent = DomainEvent<
-	PaymentVerificationFailedPayload,
-	"Order",
-	"ORDER_PAYMENT_VERIFICATION_FAILED"
->;
-
-export type InventoryReservationCompletedEvent = DomainEvent<
-	InventoryReservationCompletedPayload,
-	"Order",
-	"ORDER_INVENTORY_RESERVATION_COMPLETED"
->;
-
-export type InventoryDeductRequestedEvent = DomainEvent<
-	InventoryDeductRequestedPayload,
-	"Order",
-	"INVENTORY_DEDUCT_REQUESTED"
->;
-
-export type PaymentCaptureRequestedEvent = DomainEvent<
-	PaymentCaptureRequestedPayload,
-	"Order",
-	"PAYMENT_CAPTURE_REQUESTED"
 >;
 
 export type InventoryRollbackRequestedEvent = DomainEvent<
@@ -158,7 +107,7 @@ export type InventoryRollbackRequestedEvent = DomainEvent<
 export type PaymentRefundRequestedEvent = DomainEvent<
 	PaymentRefundRequestedPayload,
 	"Order",
-	"PAYMENT_REFUND_REQUESTED"
+	"PAYMENT_ROLLBACK_REQUESTED"
 >;
 
 export type OrderDomainEvent =
@@ -166,9 +115,5 @@ export type OrderDomainEvent =
 	| OrderConfirmedEvent
 	| OrderCancelledEvent
 	| OrderCompletedEvent
-	| PaymentVerificationFailedEvent
-	| InventoryDeductRequestedEvent
-	| PaymentCaptureRequestedEvent
 	| InventoryRollbackRequestedEvent
 	| PaymentRefundRequestedEvent
-	| InventoryReservationCompletedEvent;
