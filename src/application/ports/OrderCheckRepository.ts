@@ -4,6 +4,7 @@ export type InventoryCheckStatus = "pending" | "reserved" | "unavailable";
 export interface OrderChecks {
 	payment: PaymentCheckStatus;
 	inventory: InventoryCheckStatus;
+	createdAt: number;
 }
 
 export interface OrderCheckRepository {

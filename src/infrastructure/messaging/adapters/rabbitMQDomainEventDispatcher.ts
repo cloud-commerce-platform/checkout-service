@@ -1,7 +1,7 @@
+import type { OrderDomainEvent } from "@alejotamayo28/event-contracts";
 import { v7 as uuid } from "uuid";
 import type { DomainEventDispatcher } from "@/application/ports/DomainEventDispatcher";
 import type { MessagingService } from "@/application/ports/MessagingService";
-import type { OrderDomainEvent } from "@/domain/events/OrderDomainEvents";
 import type { OutgoingIntegrationEvent } from "@/infrastructure/events/IntegrationEvents";
 
 export class RabbitMQDomainEventDispatcher implements DomainEventDispatcher {
@@ -39,7 +39,10 @@ export class RabbitMQDomainEventDispatcher implements DomainEventDispatcher {
 		exchange: string;
 		routingKey: string;
 	} | null {
-		const eventMappings: Record<string, { exchange: string; routingKey: string }> = {
+		const eventMappings: Record<
+			OrderDomainEvent["type"],
+			{ exchange: string; routingKey: string }
+		> = {
 			ORDER_CREATED: {
 				exchange: "order_events",
 				routingKey: "status.created",
@@ -56,13 +59,21 @@ export class RabbitMQDomainEventDispatcher implements DomainEventDispatcher {
 				exchange: "order_events",
 				routingKey: "status.cancelled",
 			},
+			ORDER_PAYMENT_ROLLBACK_REQUESTED: {
+				exchange: "order_events",
+				routingKey: "payment.rollback",
+			},
+			ORDER_INVENTORY_ROLLBACK_REQUESTED: {
+				exchange: "order_events",
+				routingKey: "inventory.rollback",
+			},
 			ORDER_PAYMENT_VERIFICATION_FAILED: {
 				exchange: "order_events",
-				routingKey: "payment.verification.failed",
+				routingKey: "payment.verification.order.failed",
 			},
 			ORDER_INVENTORY_RESERVATION_FAILED: {
 				exchange: "order_events",
-				routingKey: "inventory.reservation.failed",
+				routingKey: "inventory.reservation.order.failed",
 			},
 		};
 		return eventMappings[event.type] ?? null;

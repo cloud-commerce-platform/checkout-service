@@ -11,46 +11,41 @@ export class RedisOrderCheckRepository implements OrderCheckRepository {
 
 	async initialize(orderId: string): Promise<void> {
 		const key = `order:${orderId}:checks`;
-		const initial: OrderChecks = {
+
+		await this.client.hSet(key, {
 			payment: "pending",
 			inventory: "pending",
-		};
+			createdAt: Date.now().toString(),
+		});
 
-		await this.client.set(key, JSON.stringify(initial), { EX: 600 });
+		await this.client.expire(key, 600);
 	}
 
 	async get(orderId: string): Promise<OrderChecks | null> {
-		const value = await this.client.get(`order:${orderId}:checks`);
+		const key = `order:${orderId}:checks`;
+		const data = await this.client.hGetAll(key);
 
-		return value ? JSON.parse(value) : null;
+		if (Object.keys(data).length === 0) return null;
+
+		return {
+			payment: data.payment as PaymentCheckStatus,
+			inventory: data.inventory as InventoryCheckStatus,
+			createdAt: Number(data.createdAt),
+		};
 	}
 
 	async updatePaymentCheck(orderId: string, status: PaymentCheckStatus): Promise<void> {
-		const checks = await this.get(orderId);
-		if (!checks) {
-			throw new Error(`ORDER_CHECK_NOT_INITIALIZED_${orderId}`);
-		}
-
-		checks.payment = status;
-		await this.client.set(`order:${orderId}:checks`, JSON.stringify(checks));
+		await this.client.hSet(`order:${orderId}:checks`, "payment", status);
 	}
 
 	async updateInventoryCheck(
 		orderId: string,
 		status: InventoryCheckStatus
 	): Promise<void> {
-		const checks = await this.get(orderId);
-		if (!checks) {
-			throw new Error(`ORDER_CHECK_NOT_INITIALIZED_${orderId}`);
-		}
-
-		checks.inventory = status;
-		await this.client.set(`order:${orderId}:checks`, JSON.stringify(checks));
+		await this.client.hSet(`order:${orderId}:checks`, "inventory", status);
 	}
 
 	async delete(orderId: string): Promise<void> {
-		const key = `order:${orderId}:checks`;
-
-		await this.client.del(key);
+		await this.client.del(`order:${orderId}:checks`);
 	}
 }

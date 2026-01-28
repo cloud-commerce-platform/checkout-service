@@ -1,22 +1,11 @@
 import type {
-	IncomingInventoryEvent,
-	InventoryReservationConfirmedEvent,
-	InventoryReservationFailedEvent,
-} from "@/application/consumers/types/InventoryEvents";
-import type {
-	IncomingPaymentEvent,
-	PaymentCheckingConfirmedEvent,
-	PaymentCheckingFailedEvent,
-} from "@/application/consumers/types/PaymentEvents";
-import type { DomainEvent } from "@/domain/events/OrderDomainEvents";
+	InventoryDomainEvent,
+	PaymentDomainEvent,
+} from "@alejotamayo28/event-contracts";
 
-export type IncomingEvents =
-	| InventoryReservationConfirmedEvent
-	| InventoryReservationFailedEvent
-	| PaymentCheckingFailedEvent
-	| PaymentCheckingConfirmedEvent;
+export type IncomingEvents = PaymentDomainEvent | InventoryDomainEvent;
 
-export interface OutgoingIntegrationEvent<T = DomainEvent> {
+export interface OutgoingIntegrationEvent<T = unknown> {
 	eventId: string;
 	eventType: string;
 	payload: T;
@@ -30,8 +19,8 @@ export interface OutgoingIntegrationEvent<T = DomainEvent> {
 
 export interface IncomingIntegrationEvent<T extends IncomingEvents> {
 	eventId: string;
-	eventType: T["type"];
-	payload: T;
+	eventType: string;
+	payload: T["data"];
 	correlationId?: string;
 	version: string;
 	occurredAt: string;

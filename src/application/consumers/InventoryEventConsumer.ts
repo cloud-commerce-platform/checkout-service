@@ -1,10 +1,10 @@
+import type {
+	InventoryDomainEvent,
+	InventoryReservedEvent,
+	InventoryUnavailableEvent,
+} from "@alejotamayo28/event-contracts";
 import type { IncomingIntegrationEvent } from "@/infrastructure/events/IntegrationEvents";
 import { BaseEventConsumer } from "./BaseEventConsumer";
-import type {
-	IncomingInventoryEvent,
-	InventoryReservationConfirmedEvent,
-	InventoryReservationFailedEvent,
-} from "./types/InventoryEvents";
 
 export class InventoryEventConsumer extends BaseEventConsumer {
 	protected setupEventListeners(): void {
@@ -18,18 +18,18 @@ export class InventoryEventConsumer extends BaseEventConsumer {
 			exchange,
 			queue,
 			routingKey,
-			async (message: IncomingIntegrationEvent<IncomingInventoryEvent>) => {
+			async (message: IncomingIntegrationEvent<InventoryDomainEvent>) => {
 				try {
-					switch (message.eventType) {
+					switch (message.eventType as InventoryDomainEvent["type"]) {
 						case "INVENTORY_RESERVED":
 							await this.handleReservationConfirmed(
-								message as IncomingIntegrationEvent<InventoryReservationConfirmedEvent>
+								message as IncomingIntegrationEvent<InventoryReservedEvent>
 							);
 							break;
 
 						case "INVENTORY_UNAVAILABLE":
 							await this.handleReservationFailed(
-								message as IncomingIntegrationEvent<InventoryReservationFailedEvent>
+								message as IncomingIntegrationEvent<InventoryUnavailableEvent>
 							);
 							break;
 
@@ -44,9 +44,9 @@ export class InventoryEventConsumer extends BaseEventConsumer {
 	}
 
 	private async handleReservationConfirmed(
-		message: IncomingIntegrationEvent<InventoryReservationConfirmedEvent>
+		message: IncomingIntegrationEvent<InventoryReservedEvent>
 	): Promise<void> {
-		await this.orderService.updateOrderCheck<InventoryReservationConfirmedEvent>(
+		await this.orderService.handleIntegrationEvent<InventoryReservedEvent>(
 			message,
 			"inventoryCheck",
 			"completed"
@@ -54,8 +54,8 @@ export class InventoryEventConsumer extends BaseEventConsumer {
 	}
 
 	private async handleReservationFailed(
-		message: IncomingIntegrationEvent<InventoryReservationFailedEvent>
+		message: IncomingIntegrationEvent<InventoryUnavailableEvent>
 	): Promise<void> {
-		await this.orderService.updateOrderCheck(message, "inventoryCheck", "failed");
+		await this.orderService.handleIntegrationEvent(message, "inventoryCheck", "failed");
 	}
 }

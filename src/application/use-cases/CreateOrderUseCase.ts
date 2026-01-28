@@ -17,7 +17,7 @@ export class CreateOrderUseCase {
 			totalAmount: item.unitPrice * item.quantity,
 		}));
 
-		const order = new Order(createOrderRequest.customerId, items);
+		const order = new Order(createOrderRequest.customerId, items, []);
 
 		await this.transactionManager.runInTransaction(async () => {
 			await this.orderRepository.save(order);

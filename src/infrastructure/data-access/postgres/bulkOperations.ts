@@ -16,6 +16,7 @@ export interface OrderDbStructure {
 	currency: string;
 	total_amount: number;
 	items: string;
+	cancellation_reasons: string;
 }
 
 export type entitiesDbStructure = OrderDbStructure;
@@ -67,6 +68,7 @@ export const saveStructuresWithConflictKey = async (
 			})
 		);
 
+		console.log(sql);
 		await client.query(sql);
 	} catch (error) {
 		console.log(error);

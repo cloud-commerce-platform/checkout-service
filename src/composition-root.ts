@@ -1,3 +1,4 @@
+import { OrderProcessManager } from "./application/order/OrderProcessManager";
 import type { MessagingService } from "./application/ports/MessagingService";
 import { OrderService } from "./application/services/OrderService";
 import { CreateOrderUseCase } from "./application/use-cases/CreateOrderUseCase";
@@ -36,9 +37,14 @@ export class CompositionRoot {
 			orderRepository,
 			postgresTransactionManager
 		);
-		const updateOrderStatusUseCase = new UpdateOrderStatusUseCase(
+		const updateOrderStatusUseCase = new UpdateOrderStatusUseCase(orderRepository);
+
+		const orderProcessManager = new OrderProcessManager(
 			orderRepository,
-			postgresTransactionManager
+			redisOrderCheckRepository,
+			domainEventDispatcher,
+			postgresTransactionManager,
+      updateOrderStatusUseCase
 		);
 
 		// Application service
@@ -46,9 +52,9 @@ export class CompositionRoot {
 			createOrderUseCase,
 			getOrderByIdUseCase,
 			getOrdersByCustomerIdUseCase,
-			updateOrderStatusUseCase,
 			domainEventDispatcher,
-			redisOrderCheckRepository
+      redisOrderCheckRepository,
+      orderProcessManager
 		);
 	}
 }

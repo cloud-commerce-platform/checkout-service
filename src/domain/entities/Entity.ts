@@ -1,5 +1,5 @@
+import type { DomainEvent } from "@alejotamayo28/event-contracts";
 import { v7 as uuid } from "uuid";
-import type { DomainEvent } from "../events/OrderDomainEvents";
 
 abstract class Entity<TEvent extends DomainEvent> {
 	private id: string;

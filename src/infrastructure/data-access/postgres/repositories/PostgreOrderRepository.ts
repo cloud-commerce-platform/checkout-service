@@ -11,7 +11,8 @@ export class PostgreOrderRepository implements OrderRepository {
   orders.status AS orders_status,
   orders.currency AS orders_currency,
   orders.total_amount AS orders_total_amount,
-  orders.items AS orders_items
+  orders.items AS orders_items,
+  orders.cancellation_reasons AS orders_cancellation_reasons
 `;
 
 	private loadOrder(row: any): Order {
@@ -19,7 +20,8 @@ export class PostgreOrderRepository implements OrderRepository {
 			row.orders_id,
 			row.orders_customer_id,
 			row.orders_items,
-			row.orders_status
+			row.orders_status,
+			row.orders_cancellation_reasons
 		);
 	}
 
@@ -38,6 +40,7 @@ export class PostgreOrderRepository implements OrderRepository {
 					total_amount: item.totalAmount,
 				}))
 			),
+			cancellation_reasons: JSON.stringify(order.getCancellationReasons()),
 		};
 	}
 
@@ -80,6 +83,7 @@ export class PostgreOrderRepository implements OrderRepository {
       ${PostgreOrderRepository.orderSql}
     FROM operations.orders
     WHERE orders.id = $1
+    FOR UPDATE
 `;
 			const client = DbContext.getClient();
 			const { rows, rowCount } = await client.query(sql, [id]);

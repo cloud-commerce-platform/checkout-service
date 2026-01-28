@@ -1,4 +1,4 @@
-import type { OrderDomainEvent } from "../events/OrderDomainEvents";
+import type { OrderDomainEvent } from "@alejotamayo28/event-contracts";
 import Entity from "./Entity";
 
 export class Item extends Entity<OrderDomainEvent> {

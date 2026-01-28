@@ -1,10 +1,10 @@
+import type {
+	PaymentDeductedCompletedEvent,
+	PaymentDeductedFailedEvent,
+	PaymentDomainEvent,
+} from "@alejotamayo28/event-contracts";
 import type { IncomingIntegrationEvent } from "@/infrastructure/events/IntegrationEvents";
 import { BaseEventConsumer } from "./BaseEventConsumer";
-import type {
-	IncomingPaymentEvent,
-	PaymentCheckingConfirmedEvent,
-	PaymentCheckingFailedEvent,
-} from "./types/PaymentEvents";
 
 export class PaymentEventConsumer extends BaseEventConsumer {
 	protected setupEventListeners(): void {
@@ -18,18 +18,18 @@ export class PaymentEventConsumer extends BaseEventConsumer {
 			exchange,
 			queue,
 			routingKey,
-			async (message: IncomingIntegrationEvent<IncomingPaymentEvent>) => {
+			async (message: IncomingIntegrationEvent<PaymentDomainEvent>) => {
 				try {
-					switch (message.eventType) {
-						case "PAYMENT_VERIFIED":
+					switch (message.eventType as PaymentDomainEvent["type"]) {
+						case "PAYMENT_DEDUCTED":
 							await this.handlePaymentVerified(
-								message as IncomingIntegrationEvent<PaymentCheckingConfirmedEvent>
+								message as IncomingIntegrationEvent<PaymentDeductedCompletedEvent>
 							);
 							break;
 
-						case "PAYMENT_FAILED":
+						case "PAYMENT_DEDUCTED_FAILED":
 							await this.handlePaymentFailed(
-								message as IncomingIntegrationEvent<PaymentCheckingFailedEvent>
+								message as IncomingIntegrationEvent<PaymentDeductedFailedEvent>
 							);
 							break;
 
@@ -44,14 +44,14 @@ export class PaymentEventConsumer extends BaseEventConsumer {
 	}
 
 	private async handlePaymentVerified(
-		message: IncomingIntegrationEvent<PaymentCheckingConfirmedEvent>
+		message: IncomingIntegrationEvent<PaymentDeductedCompletedEvent>
 	): Promise<void> {
-		await this.orderService.updateOrderCheck(message, "paymentCheck", "completed");
+		await this.orderService.handleIntegrationEvent(message, "paymentCheck", "completed");
 	}
 
 	private async handlePaymentFailed(
-		message: IncomingIntegrationEvent<PaymentCheckingFailedEvent>
+		message: IncomingIntegrationEvent<PaymentDeductedFailedEvent>
 	): Promise<void> {
-		await this.orderService.updateOrderCheck(message, "paymentCheck", "failed");
+		await this.orderService.handleIntegrationEvent(message, "paymentCheck", "failed");
 	}
 }

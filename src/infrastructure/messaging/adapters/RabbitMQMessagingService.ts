@@ -36,19 +36,7 @@ export class RabbitMQMessagingService implements MessagingService {
 		}
 		try {
 			await this.channel.assertExchange(exchange, "topic", { durable: false });
-			console.log(
-				"RabbitMQ. Evento publicado:",
-				JSON.stringify(
-					{
-						exchange,
-						routingKey,
-						message,
-					},
-					null,
-					2
-				)
-			);
-
+      console.log(`${exchange} ${routingKey}`)
 			this.channel.publish(exchange, routingKey, Buffer.from(JSON.stringify(message)));
 		} catch (error) {
 			console.error("ERROR_PUBLISHING_EVENT", {
@@ -79,18 +67,6 @@ export class RabbitMQMessagingService implements MessagingService {
 			if (msg) {
 				try {
 					const content = JSON.parse(msg.content.toString());
-					console.log(
-						"RabbitMQ. Evento recibido:",
-						JSON.stringify(
-							{
-								exchange,
-								routingKeys,
-								content,
-							},
-							null,
-							2
-						)
-					);
 					handler(content);
 					this.channel?.ack(msg);
 				} catch (error) {
