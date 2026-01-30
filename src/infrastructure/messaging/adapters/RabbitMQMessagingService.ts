@@ -20,9 +20,22 @@ export class RabbitMQMessagingService implements MessagingService {
 		try {
 			this.connection = await amqp.connect(rabbitmqConfig.url!);
 			this.channel = await this.connection.createChannel();
-			console.log("Connected to RabbitMQ");
+
+			this.connection.on("error", (err) => {
+				console.error("RabbitMQ connection error:", err.message);
+				this.cleanup();
+			});
+
+			this.connection.on("close", () => {
+				console.warn("RabbitMQ connection closed");
+				this.cleanup();
+			});
+
+			console.log("✅ Connected to RabbitMQ");
 		} catch (error) {
-			console.error("Failed to connect to RabbitMQ", error);
+			this.cleanup();
+			console.error("❌ Failed to connect to RabbitMQ", error);
+			throw error;
 		}
 	}
 
@@ -34,16 +47,18 @@ export class RabbitMQMessagingService implements MessagingService {
 		if (!this.channel) {
 			throw new Error("RabbitMQ channel is not available.");
 		}
+
 		try {
 			await this.channel.assertExchange(exchange, "topic", { durable: false });
-      console.log(`${exchange} ${routingKey}`)
 			this.channel.publish(exchange, routingKey, Buffer.from(JSON.stringify(message)));
+			console.log(`📤 Published to ${exchange} with routing key ${routingKey}`);
 		} catch (error) {
-			console.error("ERROR_PUBLISHING_EVENT", {
+			console.error("❌ ERROR_PUBLISHING_EVENT", {
 				to_exchange: exchange,
 				to_routingKey: routingKey,
-				error: error instanceof Error ? error.message : "Unkown Error",
+				error: error instanceof Error ? error.message : "Unknown Error",
 			});
+			throw error;
 		}
 	}
 
@@ -70,14 +85,19 @@ export class RabbitMQMessagingService implements MessagingService {
 					handler(content);
 					this.channel?.ack(msg);
 				} catch (error) {
-					console.error("ERROR_PROCESING_EVENT:", {
+					console.error("❌ ERROR_PROCESSING_EVENT:", {
 						from_exchange: exchange,
 						from_routingKey: routingKeys,
-						error: error instanceof Error ? error.message : "Unkown Error",
+						error: error instanceof Error ? error.message : "Unknown Error",
 					});
 					this.channel?.nack(msg, false, false);
 				}
 			}
 		});
+	}
+
+	private cleanup() {
+		this.channel = null;
+		this.connection = null;
 	}
 }

@@ -13,8 +13,9 @@
     "generate:routes": "tsoa routes",
     "docs": "tsoa spec-and-routes",
     "start:dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "new-migration": "docker compose run dbmate new --",
-    "apply-migrations": "docker compose run order-dbmate"
+    "new-migration": "docker compose run order-dbmate new --",
+    "apply-migrations": "docker compose run order-dbmate",
+    "outbox-worker": "node dist/infrastructure/workers/outbox.worker.js"
   },
   "keywords": [
     "typescript",

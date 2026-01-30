@@ -76,6 +76,7 @@ export class RabbitMQDomainEventDispatcher implements DomainEventDispatcher {
 				routingKey: "inventory.reservation.order.failed",
 			},
 		};
+
 		return eventMappings[event.type] ?? null;
 	}
 }

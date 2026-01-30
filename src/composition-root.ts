@@ -4,11 +4,14 @@ import { OrderService } from "./application/services/OrderService";
 import { CreateOrderUseCase } from "./application/use-cases/CreateOrderUseCase";
 import { GetOrderByIdUseCase } from "./application/use-cases/GetOrderByIdUseCase";
 import { GetOrdersByCustomerIdUseCase } from "./application/use-cases/GetOrdersByCustomerIdUseCase";
+import { ProcessOutboxUseCase } from "./application/use-cases/ProcessOutboxUseCase";
 import { UpdateOrderStatusUseCase } from "./application/use-cases/UpdateOrderStatusUseCase";
 import { PostgresTransactionManager } from "./infrastructure/data-access/postgres/PostgresTransactionManager";
 import { PostgreOrderRepository } from "./infrastructure/data-access/postgres/repositories/PostgreOrderRepository";
+import { PostgreOutboxRepository } from "./infrastructure/data-access/postgres/repositories/PostgreOutboxRepository";
 import { RedisOrderCheckRepository } from "./infrastructure/data-access/redis/RedisOrderCheckRepository";
 import { RedisClientProvider } from "./infrastructure/data-access/redis/redis-client.provider";
+import { RabbitMQIntegrationEventMapper } from "./infrastructure/events/RabbitMQIntegrationEventMapper";
 import { RabbitMQDomainEventDispatcher } from "./infrastructure/messaging/adapters/rabbitMQDomainEventDispatcher";
 
 export class CompositionRoot {
@@ -23,12 +26,10 @@ export class CompositionRoot {
 
 		//Messaging (RabbitMQ)
 		const domainEventDispatcher = new RabbitMQDomainEventDispatcher(messagingService);
+		const integrationEvenMapper = new RabbitMQIntegrationEventMapper();
 
 		// Use cases
-		const createOrderUseCase = new CreateOrderUseCase(
-			orderRepository,
-			postgresTransactionManager
-		);
+		const createOrderUseCase = new CreateOrderUseCase(orderRepository);
 		const getOrderByIdUseCase = new GetOrderByIdUseCase(
 			orderRepository,
 			postgresTransactionManager
@@ -37,14 +38,22 @@ export class CompositionRoot {
 			orderRepository,
 			postgresTransactionManager
 		);
-		const updateOrderStatusUseCase = new UpdateOrderStatusUseCase(orderRepository);
+		const updateOrderStatusUseCase = new UpdateOrderStatusUseCase();
+
+		const outboxRepository = new PostgreOutboxRepository();
+
+		const processOutboxUseCase = new ProcessOutboxUseCase(
+			outboxRepository,
+			messagingService
+		);
 
 		const orderProcessManager = new OrderProcessManager(
 			orderRepository,
 			redisOrderCheckRepository,
-			domainEventDispatcher,
 			postgresTransactionManager,
-      updateOrderStatusUseCase
+			updateOrderStatusUseCase,
+			outboxRepository,
+			integrationEvenMapper
 		);
 
 		// Application service
@@ -52,9 +61,11 @@ export class CompositionRoot {
 			createOrderUseCase,
 			getOrderByIdUseCase,
 			getOrdersByCustomerIdUseCase,
-			domainEventDispatcher,
-      redisOrderCheckRepository,
-      orderProcessManager
+			redisOrderCheckRepository,
+			orderProcessManager,
+			postgresTransactionManager,
+			outboxRepository,
+			integrationEvenMapper
 		);
 	}
 }
