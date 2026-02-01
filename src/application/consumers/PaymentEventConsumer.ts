@@ -21,13 +21,13 @@ export class PaymentEventConsumer extends BaseEventConsumer {
 			async (message: IncomingIntegrationEvent<PaymentDomainEvent>) => {
 				try {
 					switch (message.eventType as PaymentDomainEvent["type"]) {
-						case "PAYMENT_DEDUCTED":
+						case "PAYMENT_DEDUCTION_COMPLETED":
 							await this.handlePaymentVerified(
 								message as IncomingIntegrationEvent<PaymentDeductedCompletedEvent>
 							);
 							break;
 
-						case "PAYMENT_DEDUCTED_FAILED":
+						case "PAYMENT_DEDUCTION_FAILED":
 							await this.handlePaymentFailed(
 								message as IncomingIntegrationEvent<PaymentDeductedFailedEvent>
 							);

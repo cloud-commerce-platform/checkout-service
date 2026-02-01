@@ -69,13 +69,6 @@ export class OrderProcessManager {
 		const order = await this.orderRepository.findById(orderId);
 		if (!order) return null;
 
-		if (
-			order.getStatus() === OrderStatus.CANCELLED ||
-			order.getStatus() === OrderStatus.COMPLETED
-		) {
-			return null;
-		}
-
 		return {
 			order,
 			checkState,
@@ -124,7 +117,9 @@ export class OrderProcessManager {
 			await this.outboxRepository.save(integrationEvents);
 		}
 
-		await this.orderCheckRepository.delete(order.getId());
+		if (!this.hasPending) {
+			await this.orderCheckRepository.delete(order.getId());
+		}
 	}
 
 	private hasPending(payment: PaymentStatus, inventory: InventoryStatus): boolean {

@@ -100,4 +100,77 @@ export class RabbitMQMessagingService implements MessagingService {
 		this.channel = null;
 		this.connection = null;
 	}
+
+	async assertExchange(
+		exchange: string,
+		type: string,
+		options?: { durable?: boolean; arguments?: Record<string, any> }
+	): Promise<void> {
+		if (!this.channel) {
+			throw new Error("RabbitMQ channel is not available.");
+		}
+		await this.channel.assertExchange(exchange, type, {
+			durable: options?.durable ?? true,
+			arguments: options?.arguments,
+		});
+	}
+
+	async assertQueue(
+		queue: string,
+		options?: { durable?: boolean; arguments?: Record<string, any> }
+	): Promise<void> {
+		if (!this.channel) {
+			throw new Error("RabbitMQ channel is not available.");
+		}
+		await this.channel.assertQueue(queue, {
+			durable: options?.durable ?? true,
+			arguments: options?.arguments,
+		});
+	}
+
+	async bindQueue(queue: string, exchange: string, routingKey: string): Promise<void> {
+		if (!this.channel) {
+			throw new Error("RabbitMQ channel is not available.");
+		}
+		await this.channel.bindQueue(queue, exchange, routingKey);
+	}
+
+	async prefetch(count: number): Promise<void> {
+		if (!this.channel) {
+			throw new Error("RabbitMQ channel is not available.");
+		}
+		await this.channel.prefetch(count);
+	}
+
+	async consume<T>(queue: string, handler: (msg: any) => Promise<void>): Promise<void> {
+		if (!this.channel) {
+			throw new Error("RabbitMQ channel is not available.");
+		}
+		await this.channel.consume(queue, async (msg) => {
+			if (msg) {
+				try {
+					const content = JSON.parse(msg.content.toString());
+					await handler(content);
+					this.channel?.ack(msg);
+				} catch (error) {
+					console.error("❌ Error processing message:", error);
+					this.channel?.nack(msg, false, false);
+				}
+			}
+		});
+	}
+
+	ack(message: any): void {
+		if (!this.channel) {
+			throw new Error("RabbitMQ channel is not available.");
+		}
+		this.channel.ack(message);
+	}
+
+	nack(message: any, allUpTo?: boolean, requeue?: boolean): void {
+		if (!this.channel) {
+			throw new Error("RabbitMQ channel is not available.");
+		}
+		this.channel.nack(message, allUpTo, requeue);
+	}
 }

@@ -15,7 +15,12 @@
     "start:dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "new-migration": "docker compose run order-dbmate new --",
     "apply-migrations": "docker compose run order-dbmate",
-    "outbox-worker": "node dist/infrastructure/workers/outbox.worker.js"
+    "outbox-worker": "node dist/infrastructure/workers/outbox.worker.js",
+    "router": "node dist/infrastructure/workers/router.js",
+    "worker": "node dist/infrastructure/workers/worker.js",
+    "dev:router": "ts-node -r tsconfig-paths/register src/infrastructure/workers/router.ts",
+    "dev:worker": "ts-node -r tsconfig-paths/register src/infrastructure/workers/worker.ts",
+    "start:all": "concurrently \"npm run dev\" \"npm run dev:router\" \"npm run dev:worker\" \"npm run outbox-worker\""
   },
   "keywords": [
     "typescript",
