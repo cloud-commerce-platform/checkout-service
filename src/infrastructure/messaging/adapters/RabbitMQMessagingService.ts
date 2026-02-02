@@ -49,9 +49,8 @@ export class RabbitMQMessagingService implements MessagingService {
 		}
 
 		try {
-			await this.channel.assertExchange(exchange, "topic", { durable: false });
 			this.channel.publish(exchange, routingKey, Buffer.from(JSON.stringify(message)));
-			console.log(`📤 Published to ${exchange} with routing key ${routingKey}`);
+			console.log(`PUBLISHED_TO_${exchange}_WITH_ROUTING_KEY_${routingKey}`);
 		} catch (error) {
 			console.error("❌ ERROR_PUBLISHING_EVENT", {
 				to_exchange: exchange,

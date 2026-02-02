@@ -2,7 +2,6 @@ import "reflect-metadata";
 
 import cors from "cors";
 import express from "express";
-import { EventConsumerRegistry } from "./application/consumers/EventConsumerRegistry";
 import { CompositionRoot } from "./composition-root";
 import { setOrderService } from "./globals";
 import { RabbitMQMessagingService } from "./infrastructure/messaging/adapters/RabbitMQMessagingService";
@@ -36,12 +35,6 @@ async function start() {
 
 		const orderService = await CompositionRoot.configure(messagingService);
 		setOrderService(orderService);
-
-		const eventConsumerRegistry = new EventConsumerRegistry(
-			messagingService,
-			orderService
-		);
-		await eventConsumerRegistry.initializeAllConsumers();
 
 		const app = express();
 		app.use(cors());

@@ -15,18 +15,19 @@ interface NormalizedOrderEvent {
 	eventId: string;
 	orderId: string;
 	eventType:
-		| "PAYMENT_COMPLETED"
-		| "PAYMENT_FAILED"
-		| "INVENTORY_RESERVED"
-		| "INVENTORY_UNAVAILABLE";
+		| "PAYMENT_DEDUCTION_COMPLETED"
+		| "PAYMENT_DEDUCTION_FAILED"
+		| "INVENTORY_RESERVATION_COMPLETED"
+		| "INVENTORY_RESERVATION_FAILED";
 	originalEvent: any;
 	occurredAt: string;
 	partition: number;
 }
 
 const MAX_RETRIES = 3;
-const RETRY_TTL_SECONDS = 3600; // 1 hour
-const DEDUPLICATION_TTL_SECONDS = 1800; // 30 minutes
+const RETRY_TTL_SECONDS = 3600;
+const DEDUPLICATION_TTL_SECONDS = 1800;
+const WORKER_PREFETCH = 1;
 
 class OrderProcessingWorker {
 	private messagingService: RabbitMQMessagingService | null = null;
@@ -34,16 +35,11 @@ class OrderProcessingWorker {
 	private orderService: OrderService | null = null;
 
 	async start(): Promise<void> {
-		console.log("🚀 Iniciando Order Processing Worker...");
-
-		// Initialize Redis
 		this.redisClient = createClient({
 			url: process.env.REDIS_URL || "redis://localhost:6379",
 		});
 		await this.redisClient.connect();
-		console.log("✅ Conectado a Redis");
 
-		// Initialize dependencies
 		const orderRepository = new PostgreOrderRepository();
 		const postgresTransactionManager = new PostgresTransactionManager();
 		const redisClient = await RedisClientProvider.getClient();
@@ -61,7 +57,6 @@ class OrderProcessingWorker {
 			integrationEventMapper
 		);
 
-		// Create OrderService - minimal dependencies for worker
 		const createOrderUseCase = {} as any;
 		const getOrderByIdUseCase = {} as any;
 		const getOrdersByCustomerIdUseCase = {} as any;
@@ -77,30 +72,21 @@ class OrderProcessingWorker {
 			integrationEventMapper
 		);
 
-		// Connect to RabbitMQ using messaging service
 		this.messagingService = new RabbitMQMessagingService();
 		await this.messagingService.connect();
 
-		// Configure prefetch = 1 (process one message at a time)
-		await this.messagingService.prefetch(1);
-		console.log("Prefetch configurado a 1");
+		await this.messagingService.prefetch(WORKER_PREFETCH);
 
-		// Consume from worker_queue using custom handler
 		const channel = this.messagingService.getChannel();
-		if (!channel) throw new Error("Channel not available");
+		if (!channel) throw new Error("CHANNEL_NOT_AVAILABLE");
 
 		await channel.consume("worker_queue", async (msg) => {
 			if (!msg) return;
 			await this.processMessage(msg);
 		});
 
-		console.log("✅ Worker escuchando en 'worker_queue'");
-		console.log(`   - Max retries: ${MAX_RETRIES}`);
-		console.log(`   - DLQ: order_processing.dlq`);
-
-		// Graceful shutdown
 		process.on("SIGINT", async () => {
-			console.log("\n🛑 Cerrando Worker...");
+			console.log("CLOSING_WORKER");
 			if (this.redisClient) await this.redisClient.disconnect();
 			process.exit(0);
 		});
@@ -116,12 +102,9 @@ class OrderProcessingWorker {
 
 		try {
 			const event: NormalizedOrderEvent = JSON.parse(msg.content.toString());
-			console.log(`📥 Procesando: ${event.eventType} (order: ${event.orderId})`);
-
-			// Check for duplicates
 			const isDuplicate = await this.isDuplicate(event.eventId);
 			if (isDuplicate) {
-				console.log(`⚠️  Evento duplicado ignorado: ${event.eventId}`);
+				console.log(`DUPLICATE_EVENT_IGNORED:${event.eventId}`);
 				channel.ack(msg);
 				return;
 			}
@@ -132,45 +115,33 @@ class OrderProcessingWorker {
 			const retryCount = retryData ? JSON.parse(retryData).count : 0;
 
 			if (retryCount >= MAX_RETRIES) {
-				console.log(`❌ Max retries alcanzado para ${event.orderId}, enviando a DLQ`);
-				await this.sendToDLQ(event, "Max retries exceeded");
+				console.log(`MAX_RETRIES_REACHED_FOR_${event.orderId}_SENDING_TO_DLQ`);
+				await this.sendToDLQ(event, "MAX_TRIES_EXCEEDED");
 				channel.ack(msg);
 				await this.redisClient.del(retryKey);
 				return;
 			}
 
-			// Process the event
 			await this.processEvent(event);
-
-			// Mark as processed (deduplication)
 			await this.markAsProcessed(event.eventId);
-
-			// Clear retry counter on success
 			await this.redisClient.del(retryKey);
-
-			console.log(`✅ Procesado exitosamente: ${event.eventType}`);
 			channel.ack(msg);
 		} catch (error) {
-			console.error(`❌ Error procesando mensaje:`, error);
-
-			// Get event details for retry tracking
 			let event: NormalizedOrderEvent;
 			try {
 				event = JSON.parse(msg.content.toString());
 			} catch {
-				// If we can't parse, send to DLQ immediately
 				channel.nack(msg, false, false);
 				return;
 			}
 
-			// Increment retry counter
 			const retryKey = `retry:${event.orderId}:${event.eventType}`;
 			const retryData = await this.redisClient.get(retryKey);
 			const currentRetry = retryData ? JSON.parse(retryData).count : 0;
 			const newRetryCount = currentRetry + 1;
 
 			if (newRetryCount >= MAX_RETRIES) {
-				console.log(`❌ Max retries (${MAX_RETRIES}) alcanzado, enviando a DLQ`);
+				console.log(`MAX_RETRIES_${MAX_RETRIES}_REACHED_SENDING_TO_DLQ`);
 				await this.sendToDLQ(
 					event,
 					error instanceof Error ? error.message : "Unknown error"
@@ -178,13 +149,12 @@ class OrderProcessingWorker {
 				channel.ack(msg);
 				await this.redisClient.del(retryKey);
 			} else {
-				console.log(`   Reintento ${newRetryCount}/${MAX_RETRIES}`);
+				console.log(`Reintento ${newRetryCount}/${MAX_RETRIES}`);
 				await this.redisClient.setEx(
 					retryKey,
 					RETRY_TTL_SECONDS,
 					JSON.stringify({ count: newRetryCount, lastAttempt: new Date() })
 				);
-				// Requeue the message
 				channel.nack(msg, false, true);
 			}
 		}
@@ -192,25 +162,23 @@ class OrderProcessingWorker {
 
 	private async processEvent(event: NormalizedOrderEvent): Promise<void> {
 		if (!this.orderService) throw new Error("OrderService not initialized");
-
-		// Map to existing event format
 		let checkType: "paymentCheck" | "inventoryCheck";
 		let status: "completed" | "failed";
 
 		switch (event.eventType) {
-			case "PAYMENT_COMPLETED":
+			case "PAYMENT_DEDUCTION_COMPLETED":
 				checkType = "paymentCheck";
 				status = "completed";
 				break;
-			case "PAYMENT_FAILED":
+			case "PAYMENT_DEDUCTION_FAILED":
 				checkType = "paymentCheck";
 				status = "failed";
 				break;
-			case "INVENTORY_RESERVED":
+			case "INVENTORY_RESERVATION_COMPLETED":
 				checkType = "inventoryCheck";
 				status = "completed";
 				break;
-			case "INVENTORY_UNAVAILABLE":
+			case "INVENTORY_RESERVATION_FAILED":
 				checkType = "inventoryCheck";
 				status = "failed";
 				break;
@@ -218,7 +186,6 @@ class OrderProcessingWorker {
 				throw new Error(`Unknown event type: ${event.eventType}`);
 		}
 
-		// Create integration event format expected by OrderService
 		const integrationEvent: IncomingIntegrationEvent<any> = {
 			eventId: event.eventId,
 			eventType: event.eventType,
@@ -230,7 +197,6 @@ class OrderProcessingWorker {
 			version: "1.0",
 		};
 
-		// Use existing OrderService logic
 		await this.orderService.handleIntegrationEvent(integrationEvent, checkType, status);
 	}
 
@@ -258,14 +224,11 @@ class OrderProcessingWorker {
 		};
 
 		await this.messagingService.publish("order_processing.dlq", "worker.dlq", dlqMessage);
-
-		console.log(`📦 Evento enviado a DLQ: ${event.eventId}`);
 	}
 }
 
-// Start worker
 const worker = new OrderProcessingWorker();
 worker.start().catch((error) => {
-	console.error("❌ Error fatal en Worker:", error);
+	console.error("Error fatal en Worker:", error);
 	process.exit(1);
 });

@@ -18,12 +18,14 @@ async function connectToRabbitMQ(): Promise<void> {
 	while (retries < MAX_RETRIES) {
 		await messagingService.connect();
 		if (messagingService.isConnected()) {
-			console.log("✅ Outbox worker connected to RabbitMQ");
+			await messagingService.assertExchange("order_events", "topic", {
+				durable: false,
+			});
 			return;
 		}
 		retries++;
 		console.log(
-			`⏳ Outbox worker retrying connection to RabbitMQ (attempt ${retries}/${MAX_RETRIES})`
+			`Outbox worker retrying connection to RabbitMQ (attempt ${retries}/${MAX_RETRIES})`
 		);
 		await sleep(RETRY_DELAY_MS);
 	}
