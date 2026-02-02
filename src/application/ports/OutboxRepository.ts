@@ -1,9 +1,7 @@
-import type { OutgoingIntegrationEvent } from "@/infrastructure/events/IntegrationEvents";
+import type { Outbox } from "@/domain/entities/Outbox";
 
 export interface OutboxRepository {
-	getPending(limit: number): Promise<OutgoingIntegrationEvent[]>;
-	markAsProcessed(id: string): Promise<void>;
-	incrementRetry(id: string): Promise<void>;
-	incrementRetryWithMessage(id: string, errorMessage: string): Promise<void>;
-	save(event: OutgoingIntegrationEvent[]): Promise<void>;
+	getPending(limit: number): Promise<Outbox[]>;
+	save(outbox: Outbox): Promise<void>;
+	saveMany(outboxes: Outbox[]): Promise<void>;
 }

@@ -47,7 +47,18 @@ export class OrderService {
 				throw new Error("NO_MAPPER_FOUND_FOR_EVENT");
 			}
 
-			await this.outboxRepository.save([mappedEvent]);
+			const { Outbox } = await import("@/domain/entities/Outbox");
+			const outbox = new Outbox(
+				mappedEvent.eventType,
+				mappedEvent.payload,
+				mappedEvent.correlationId,
+				mappedEvent.version,
+				new Date(mappedEvent.occurredAt),
+				mappedEvent.exchange,
+				mappedEvent.routingKey,
+				mappedEvent.source
+			);
+			await this.outboxRepository.save(outbox);
 
 			order.clearDomainEvents();
 		});

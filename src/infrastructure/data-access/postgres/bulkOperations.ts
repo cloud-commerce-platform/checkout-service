@@ -19,7 +19,24 @@ export interface OrderDbStructure {
 	cancellation_reasons: string;
 }
 
-export type entitiesDbStructure = OrderDbStructure;
+export interface OutboxEventDbStructure {
+	event_id: string;
+	event_type: string;
+	payload: string;
+	correlation_id?: string;
+	version: string;
+	occurred_at: Date;
+	exchange: string;
+	routing_key: string;
+	source: string;
+	retry_count: number;
+	error: string | null;
+	created_at: Date;
+	processed_at: Date | null;
+	updated_at?: Date;
+}
+
+export type entitiesDbStructure = OrderDbStructure | OutboxEventDbStructure;
 
 export const saveStructures = async (
 	structures: entitiesDbStructure[],

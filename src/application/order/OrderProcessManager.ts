@@ -1,5 +1,6 @@
 import type { OrderDomainEvent } from "@alejotamayo28/event-contracts";
 import { type Order, OrderStatus } from "@/domain/entities/Order";
+import { Outbox } from "@/domain/entities/Outbox";
 import type { OrderRepository } from "@/domain/repositories/OrderRepository";
 import type {
 	IncomingEvents,
@@ -114,7 +115,21 @@ export class OrderProcessManager {
 				return mapped;
 			});
 
-			await this.outboxRepository.save(integrationEvents);
+			const outboxes = integrationEvents.map(
+				(event) =>
+					new Outbox(
+						event.eventType,
+						event.payload,
+						event.correlationId,
+						event.version,
+						new Date(event.occurredAt),
+						event.exchange,
+						event.routingKey,
+						event.source
+					)
+			);
+
+			await this.outboxRepository.saveMany(outboxes);
 		}
 
 		if (!this.hasPending) {

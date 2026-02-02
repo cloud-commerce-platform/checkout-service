@@ -1,3 +1,4 @@
+import type { Outbox } from "@/domain/entities/Outbox";
 import type { MessagingService } from "../ports/MessagingService";
 import type { OutboxRepository } from "../ports/OutboxRepository";
 
@@ -9,22 +10,43 @@ export class ProcessOutboxUseCase {
 	) {}
 
 	async execute(): Promise<void> {
-		const events = await this.outboxRepository.getPending(
+		const outboxes = await this.outboxRepository.getPending(
 			ProcessOutboxUseCase.LIMIT_QUERY
 		);
 
-		for (const event of events) {
+		for (const outbox of outboxes) {
 			try {
-				await this.messagingService.publish(event.exchange, event.routingKey, event);
-				await this.outboxRepository.markAsProcessed(event.eventId);
+				await this.publishOutbox(outbox);
+				outbox.markAsProcessed();
 			} catch (error) {
 				const errorMessage = error instanceof Error ? error.message : "Unknown error";
-				console.error(`❌ Failed to process event ${event.eventId}: ${errorMessage}`);
-				await this.outboxRepository.incrementRetryWithMessage(
-					event.eventId,
-					errorMessage
+				console.error(
+					`❌ Failed to process outbox ${outbox.getEventId()}: ${errorMessage}`
 				);
+				outbox.incrementRetry(errorMessage);
 			}
 		}
+
+		await this.outboxRepository.saveMany(outboxes);
+	}
+
+	private async publishOutbox(outbox: Outbox): Promise<void> {
+		const event = {
+			eventId: outbox.getEventId(),
+			eventType: outbox.getEventType(),
+			payload: outbox.getPayload(),
+			correlationId: outbox.getCorrelationId(),
+			version: outbox.getVersion(),
+			occurredAt: outbox.getOccurredAt().toISOString(),
+			exchange: outbox.getExchange(),
+			routingKey: outbox.getRoutingKey(),
+			source: outbox.getSource(),
+		};
+
+		await this.messagingService.publish(
+			outbox.getExchange(),
+			outbox.getRoutingKey(),
+			event
+		);
 	}
 }
