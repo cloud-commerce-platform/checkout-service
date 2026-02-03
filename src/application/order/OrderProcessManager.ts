@@ -1,32 +1,31 @@
-import type { OrderDomainEvent } from "@alejotamayo28/event-contracts";
-import { type Order, OrderStatus } from "@/domain/entities/Order";
+import {
+	type CancellationReason,
+	type OrderDomainEvent,
+	OrderStatus,
+} from "@alejotamayo28/event-contracts";
+import type { Order } from "@/domain/entities/Order";
 import { Outbox } from "@/domain/entities/Outbox";
 import type { OrderRepository } from "@/domain/repositories/OrderRepository";
 import type {
 	IncomingEvents,
 	IncomingIntegrationEvent,
 } from "@/infrastructure/events/IntegrationEvents";
+import type { EventRepository } from "../ports/EventRepository";
 import type { IntegrationEventMapper } from "../ports/IntegrationEventMapper";
-import type { OrderCheckRepository } from "../ports/OrderCheckRepository";
+import type { OrderCheckRepository, OrderChecks } from "../ports/OrderCheckRepository";
 import type { OutboxRepository } from "../ports/OutboxRepository";
 import type { TransactionManager } from "../ports/TransactionManager";
 import type { UpdateOrderStatusUseCase } from "../use-cases/UpdateOrderStatusUseCase";
 
 interface OrderProcessContext {
 	order: Order;
-	checkState: OrderCheckState;
+	checkState: OrderChecks;
 	domainEvents: OrderDomainEvent[];
 }
 
 export type PaymentStatus = "pending" | "approved" | "rejected";
 
 export type InventoryStatus = "pending" | "reserved" | "unavailable";
-
-export interface OrderCheckState {
-	payment: PaymentStatus;
-	inventory: InventoryStatus;
-	createdAt: number;
-}
 
 export class OrderProcessManager {
 	private static readonly ORDER_TIMEOUT_MS = 60_000;
@@ -37,7 +36,8 @@ export class OrderProcessManager {
 		private readonly transactionManager: TransactionManager,
 		private readonly updateOrderStatus: UpdateOrderStatusUseCase,
 		private readonly outboxRepository: OutboxRepository,
-		private readonly integrationEventMapper: IntegrationEventMapper
+		private readonly integrationEventMapper: IntegrationEventMapper,
+		private readonly eventRepository: EventRepository
 	) {}
 
 	public async handle<T extends IncomingEvents>(
@@ -59,6 +59,13 @@ export class OrderProcessManager {
 
 		await this.updateOrderStatus.execute(eventMessage, context.order);
 
+		const updatedCheckState = await this.orderCheckRepository.get(
+			eventMessage.payload.orderId
+		);
+		if (updatedCheckState) {
+			context.checkState = updatedCheckState;
+		}
+
 		this.decide(context);
 		await this.apply(context);
 	}
@@ -78,8 +85,8 @@ export class OrderProcessManager {
 	}
 
 	private decide(context: OrderProcessContext): void {
-		const { order, checkState, domainEvents } = context;
-		const { payment, inventory } = checkState;
+		const { order, checkState } = context;
+		const { payment, inventory, paymentReason, inventoryReason } = checkState;
 
 		if (this.hasPending(payment, inventory)) {
 			if (this.isOrderStale(checkState)) {
@@ -94,20 +101,28 @@ export class OrderProcessManager {
 		}
 
 		if (payment === "rejected" || inventory === "unavailable") {
-			order.transitionTo(OrderStatus.CANCELLED);
-			this.addCompensationEvents(order, payment, inventory, domainEvents);
+			this.reconstructCancellationReasons(order, paymentReason, inventoryReason);
+			order.transitionTo(OrderStatus.CANCELLED, {
+				paymentStatus: payment,
+				inventoryStatus: inventory,
+			});
 		}
 	}
 
 	private async apply(context: OrderProcessContext): Promise<void> {
-		const { order, domainEvents } = context;
+		const { order } = context;
 
 		if (order.getWasUpdated()) {
 			await this.orderRepository.update(order);
 		}
 
-		if (domainEvents.length > 0) {
-			const integrationEvents = domainEvents.map((event) => {
+		if (order.getDomainEvents().length > 0) {
+			const lastEvent = await this.eventRepository.getLastVersion(order.getId());
+			const lastVersion = lastEvent?.getVersion() ?? 0;
+
+			await this.eventRepository.append(order, lastVersion);
+
+			const integrationEvents = order.getDomainEvents().map((event) => {
 				const mapped = this.integrationEventMapper.map(event);
 				if (!mapped) {
 					throw new Error("NO_MAPPER_FOUND_FOR_EVENT");
@@ -130,9 +145,11 @@ export class OrderProcessManager {
 			);
 
 			await this.outboxRepository.saveMany(outboxes);
+
+			order.clearDomainEvents();
 		}
 
-		if (!this.hasPending) {
+		if (!this.hasPending(context.checkState.payment, context.checkState.inventory)) {
 			await this.orderCheckRepository.delete(order.getId());
 		}
 	}
@@ -141,39 +158,34 @@ export class OrderProcessManager {
 		return payment === "pending" || inventory === "pending";
 	}
 
-	private isOrderStale(state: OrderCheckState): boolean {
+	private isOrderStale(state: OrderChecks): boolean {
 		return Date.now() - state.createdAt >= OrderProcessManager.ORDER_TIMEOUT_MS;
 	}
 
-	private applyTimeout(state: OrderCheckState): void {
+	private applyTimeout(state: OrderChecks): void {
 		if (state.payment === "pending") state.payment = "rejected";
 		if (state.inventory === "pending") state.inventory = "unavailable";
 	}
 
-	private addCompensationEvents(
+	private reconstructCancellationReasons(
 		order: Order,
-		payment: PaymentStatus,
-		inventory: InventoryStatus,
-		events: OrderDomainEvent[]
+		paymentReason?: CancellationReason | null,
+		inventoryReason?: CancellationReason | null
 	): void {
-		if (order.needsPaymentRollback(payment, inventory)) {
-			events.push({
-				type: "ORDER_PAYMENT_ROLLBACK_REQUESTED",
-				timestamp: new Date(),
-				aggregateId: order.getId(),
-				aggregateType: "Order",
-				data: { orderId: order.getId() },
-			});
+		const reasons: CancellationReason[] = [];
+
+		if (paymentReason) {
+			reasons.push(paymentReason);
 		}
 
-		if (order.needsInventoryRollback(payment, inventory)) {
-			events.push({
-				type: "ORDER_INVENTORY_ROLLBACK_REQUESTED",
-				timestamp: new Date(),
-				aggregateId: order.getId(),
-				aggregateType: "Order",
-				data: { orderId: order.getId() },
-			});
+		if (inventoryReason) {
+			reasons.push(inventoryReason);
+		}
+
+		if (reasons.length > 0) {
+			for (const reason of reasons) {
+				order.addCancellationReasons(reason);
+			}
 		}
 	}
 

@@ -3,9 +3,10 @@ import type {
 	IncomingEvents,
 	IncomingIntegrationEvent,
 } from "@/infrastructure/events/IntegrationEvents";
+import type { OrderCheckRepository } from "../ports/OrderCheckRepository";
 
 export class UpdateOrderStatusUseCase {
-	constructor() {}
+	constructor(private readonly orderCheckRepository: OrderCheckRepository) {}
 
 	async execute<T extends IncomingEvents>(
 		eventMessage: IncomingIntegrationEvent<T>,
@@ -21,11 +22,17 @@ export class UpdateOrderStatusUseCase {
 				break;
 
 			case "INVENTORY_RESERVATION_FAILED":
-				order.markInventoryAsFailed(payload.reason);
+				await this.orderCheckRepository.updateInventoryReason(
+					order.getId(),
+					payload.reason
+				);
 				break;
 
 			case "PAYMENT_DEDUCTION_FAILED":
-				order.markPaymentAsFailed(payload.reason);
+				await this.orderCheckRepository.updatePaymentReason(
+					order.getId(),
+					payload.reason
+				);
 				break;
 		}
 	}

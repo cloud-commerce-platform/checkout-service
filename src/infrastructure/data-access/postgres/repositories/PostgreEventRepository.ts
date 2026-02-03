@@ -22,7 +22,7 @@ export class PostgreEventRepository implements EventRepository {
 			row.events_aggregate_id,
 			row.events_aggregate_type,
 			row.events_event_type,
-			JSON.parse(row.events_payload),
+			row.events_payload,
 			row.events_version
 		);
 	}

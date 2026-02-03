@@ -1,11 +1,13 @@
-import type {
-	CancellationReason,
-	OrderDomainEvent,
+import {
+	type CancellationReason,
+	type OrderDomainEvent,
+	OrderStatus,
 } from "@alejotamayo28/event-contracts";
 import type {
 	InventoryStatus,
 	PaymentStatus,
 } from "@/application/order/OrderProcessManager";
+import { type CancelContext, OrderEvents } from "../events/OrderEvents";
 import Entity from "./Entity";
 
 export interface OrderItems {
@@ -15,23 +17,10 @@ export interface OrderItems {
 	totalAmount: number;
 }
 
-export enum OrderStatus {
-	PENDING = "PENDING",
-	CONFIRMED = "CONFIRMED",
-	COMPLETED = "COMPLETED",
-	CANCELLED = "CANCELLED",
-	REJECTING = "REJECTING",
-}
-
 export const ORDER_STATE_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
-	[OrderStatus.PENDING]: [
-		OrderStatus.CONFIRMED,
-		OrderStatus.CANCELLED,
-		OrderStatus.REJECTING,
-	],
+	[OrderStatus.PENDING]: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
 
 	[OrderStatus.CONFIRMED]: [OrderStatus.COMPLETED, OrderStatus.CANCELLED],
-	[OrderStatus.REJECTING]: [OrderStatus.CANCELLED],
 
 	[OrderStatus.CANCELLED]: [],
 	[OrderStatus.COMPLETED]: [],
@@ -72,64 +61,54 @@ export class Order extends Entity<OrderDomainEvent> {
 		this.cancellationReasons = cancellationReasons;
 		this.wasUpdated = true;
 
-		this.addDomainEvent({
-			type: "ORDER_CREATED",
-			timestamp: new Date(),
-			aggregateId: this.getId(),
-			aggregateType: "Order",
-			data: {
-				orderId: this.getId(),
-				customerId: this.getCustomerId(),
-				items: this.getItems(),
-				totalAmount: this.calculateTotal(),
-				currency: "COP",
-			},
-		});
+		this.addDomainEvent(OrderEvents.created(this));
 	}
 
-	public transitionTo(newStatus: OrderStatus): void {
+	public transitionTo(newStatus: OrderStatus, context?: CancelContext): void {
 		if (this.status === newStatus) return;
 		const allowedTransitions = ORDER_STATE_TRANSITIONS[this.status];
 
 		if (!allowedTransitions.includes(newStatus)) {
 			throw new Error(`CANNOT_TRASITION_FROM_${this.status}_TO_${newStatus}`);
 		}
-
+		const previousStatus = this.getStatus();
 		this.setStatus(newStatus);
-		this.addSpecificEvents(newStatus, this.getCancellationReasons());
-	}
 
-	private addSpecificEvents(
-		newStatus: OrderStatus,
-		cancellationReasons?: CancellationReason[]
-	): void {
-		if (newStatus === OrderStatus.CONFIRMED) {
-			this.addDomainEvent({
-				type: "ORDER_CONFIRMED",
-				timestamp: new Date(),
-				aggregateId: this.getId(),
-				aggregateType: "Order",
-				data: {
-					orderId: this.getId(),
-					confirmedAt: new Date(),
-					customerId: "alejandro:id",
-					totalAmount: this.calculateTotal(),
-				},
-			});
+		const event = this.buildEvent(newStatus, context, previousStatus);
+		if (!event) return;
+
+		if (Array.isArray(event)) {
+			event.forEach((event) => this.addDomainEvent(event));
+			return;
 		}
 
-		if (newStatus === OrderStatus.COMPLETED) {
-			this.addDomainEvent({
-				type: "ORDER_COMPLETED",
-				timestamp: new Date(),
-				aggregateId: this.getId(),
-				aggregateType: "Order",
-				data: {
-					orderId: this.getId(),
-					completedAt: new Date(),
-					deliveryDetails: { "acomodar esto": { reason: "acomodar esto" } },
-				},
-			});
+		return this.addDomainEvent(event);
+	}
+
+	private buildEvent(
+		status: OrderStatus,
+		context?: CancelContext,
+		previousStatus?: OrderStatus
+	) {
+		switch (status) {
+			case OrderStatus.CONFIRMED:
+				return OrderEvents.confirmed(this);
+
+			case OrderStatus.COMPLETED:
+				return OrderEvents.completed(this);
+
+			case OrderStatus.CANCELLED:
+				if (!context) {
+					throw new Error("CANCEL_CONTEXT_REQUIRED");
+				}
+
+				return OrderEvents.cancelled(this, {
+					...context,
+					previousStatus,
+				});
+
+			default:
+				return null;
 		}
 	}
 

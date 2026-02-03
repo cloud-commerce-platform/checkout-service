@@ -3,6 +3,7 @@ import { OrderProcessManager } from "../../application/order/OrderProcessManager
 import { OrderService } from "../../application/services/OrderService";
 import { UpdateOrderStatusUseCase } from "../../application/use-cases/UpdateOrderStatusUseCase";
 import { PostgresTransactionManager } from "../data-access/postgres/PostgresTransactionManager";
+import { PostgreEventRepository } from "../data-access/postgres/repositories/PostgreEventRepository";
 import { PostgreOrderRepository } from "../data-access/postgres/repositories/PostgreOrderRepository";
 import { PostgreOutboxRepository } from "../data-access/postgres/repositories/PostgreOutboxRepository";
 import { RedisOrderCheckRepository } from "../data-access/redis/RedisOrderCheckRepository";
@@ -10,7 +11,6 @@ import { RedisClientProvider } from "../data-access/redis/redis-client.provider"
 import type { IncomingIntegrationEvent } from "../events/IntegrationEvents";
 import { RabbitMQIntegrationEventMapper } from "../events/RabbitMQIntegrationEventMapper";
 import { RabbitMQMessagingService } from "../messaging/adapters/RabbitMQMessagingService";
-import { PostgreEventRepository } from "../data-access/postgres/repositories/PostgreEventRepository";
 
 interface NormalizedOrderEvent {
 	eventId: string;
@@ -46,9 +46,11 @@ class OrderProcessingWorker {
 		const redisClient = await RedisClientProvider.getClient();
 		const redisOrderCheckRepository = new RedisOrderCheckRepository(redisClient);
 		const outboxRepository = new PostgreOutboxRepository();
-		const updateOrderStatusUseCase = new UpdateOrderStatusUseCase();
+		const updateOrderStatusUseCase = new UpdateOrderStatusUseCase(
+			redisOrderCheckRepository
+		);
 		const integrationEventMapper = new RabbitMQIntegrationEventMapper();
-    const eventRepository = new PostgreEventRepository()
+		const eventRepository = new PostgreEventRepository();
 
 		const orderProcessManager = new OrderProcessManager(
 			orderRepository,
@@ -56,7 +58,8 @@ class OrderProcessingWorker {
 			postgresTransactionManager,
 			updateOrderStatusUseCase,
 			outboxRepository,
-			integrationEventMapper
+			integrationEventMapper,
+			eventRepository
 		);
 
 		const createOrderUseCase = {} as any;
@@ -72,7 +75,7 @@ class OrderProcessingWorker {
 			postgresTransactionManager,
 			outboxRepository,
 			integrationEventMapper,
-      eventRepository
+			eventRepository
 		);
 
 		this.messagingService = new RabbitMQMessagingService();

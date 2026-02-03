@@ -1,3 +1,4 @@
+import type { CancellationReason } from "@alejotamayo28/event-contracts";
 import type {
 	InventoryCheckStatus,
 	OrderCheckRepository,
@@ -15,6 +16,8 @@ export class RedisOrderCheckRepository implements OrderCheckRepository {
 		await this.client.hSet(key, {
 			payment: "pending",
 			inventory: "pending",
+			paymentReason: "",
+			inventoryReason: "",
 			createdAt: Date.now().toString(),
 		});
 
@@ -30,6 +33,12 @@ export class RedisOrderCheckRepository implements OrderCheckRepository {
 		return {
 			payment: data.payment as PaymentCheckStatus,
 			inventory: data.inventory as InventoryCheckStatus,
+			paymentReason: data.paymentReason
+				? (data.paymentReason as CancellationReason)
+				: null,
+			inventoryReason: data.inventoryReason
+				? (data.inventoryReason as CancellationReason)
+				: null,
 			createdAt: Number(data.createdAt),
 		};
 	}
@@ -43,6 +52,22 @@ export class RedisOrderCheckRepository implements OrderCheckRepository {
 		status: InventoryCheckStatus
 	): Promise<void> {
 		await this.client.hSet(`order:${orderId}:checks`, "inventory", status);
+	}
+
+	async updatePaymentReason(
+		orderId: string,
+		reason: CancellationReason | null
+	): Promise<void> {
+		const key = `order:${orderId}:checks`;
+		await this.client.hSet(key, "paymentReason", reason || "");
+	}
+
+	async updateInventoryReason(
+		orderId: string,
+		reason: CancellationReason | null
+	): Promise<void> {
+		const key = `order:${orderId}:checks`;
+		await this.client.hSet(key, "inventoryReason", reason || "");
 	}
 
 	async delete(orderId: string): Promise<void> {

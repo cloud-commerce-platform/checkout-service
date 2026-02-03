@@ -39,7 +39,9 @@ export class CompositionRoot {
 			orderRepository,
 			postgresTransactionManager
 		);
-		const updateOrderStatusUseCase = new UpdateOrderStatusUseCase();
+		const updateOrderStatusUseCase = new UpdateOrderStatusUseCase(
+			redisOrderCheckRepository
+		);
 
 		const outboxRepository = new PostgreOutboxRepository();
 		const eventRepository = new PostgreEventRepository();
@@ -50,7 +52,8 @@ export class CompositionRoot {
 			postgresTransactionManager,
 			updateOrderStatusUseCase,
 			outboxRepository,
-			integrationEvenMapper
+			integrationEvenMapper,
+			eventRepository
 		);
 
 		// Application service
