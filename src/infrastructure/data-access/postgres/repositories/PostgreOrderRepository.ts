@@ -114,7 +114,7 @@ export class PostgreOrderRepository implements OrderRepository {
 			const { rows, rowCount } = await client.query(sql, [customerId]);
 
 			if (rowCount === 0) {
-				return []; 
+				return [];
 			}
 
 			return rows.map(this.loadOrder);

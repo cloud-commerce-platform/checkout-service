@@ -1,5 +1,3 @@
-// infrastructure/events/RabbitMQIntegrationEventMapper.ts
-
 import type { OrderDomainEvent } from "@alejotamayo28/event-contracts";
 import { v7 as uuid } from "uuid";
 import type { IntegrationEventMapper } from "@/application/ports/IntegrationEventMapper";

@@ -1,7 +1,10 @@
 import type { PoolClient } from "pg";
 import type { OutboxRepository } from "@/application/ports/OutboxRepository";
-import { Outbox, type OutboxEventDbStructure } from "@/domain/entities/Outbox";
-import { saveStructuresWithConflictKey } from "../bulkOperations";
+import { Outbox } from "@/domain/entities/Outbox";
+import {
+	type OutboxEventDbStructure,
+	saveStructuresWithConflictKey,
+} from "../bulkOperations";
 import { DbContext } from "../dbContext";
 
 export class PostgreOutboxRepository implements OutboxRepository {

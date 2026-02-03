@@ -36,7 +36,19 @@ export interface OutboxEventDbStructure {
 	updated_at?: Date;
 }
 
-export type entitiesDbStructure = OrderDbStructure | OutboxEventDbStructure;
+export interface EventDbStructure {
+	id: string;
+	aggregate_id: string;
+	aggregate_type: string;
+	event_type: string;
+	payload: string;
+	version: number;
+}
+
+export type entitiesDbStructure =
+	| OrderDbStructure
+	| OutboxEventDbStructure
+	| EventDbStructure;
 
 export const saveStructures = async (
 	structures: entitiesDbStructure[],

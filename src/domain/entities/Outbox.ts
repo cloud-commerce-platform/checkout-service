@@ -1,23 +1,41 @@
 import type { DomainEvent } from "@alejotamayo28/event-contracts";
 import Entity from "./Entity";
 
-export interface OutboxEventDbStructure {
-	event_id: string;
-	event_type: string;
-	payload: string;
-	correlation_id?: string;
-	version: string;
-	occurred_at: Date;
-	exchange: string;
-	routing_key: string;
-	source: string;
-	retry_count: number;
-	error: string | null;
-	created_at: Date;
-	processed_at: Date | null;
-}
-
 export class Outbox extends Entity<DomainEvent> {
+	static loadOutboxEvent(
+		eventId: string,
+		eventType: string,
+		payload: any,
+		correlationId: string | undefined,
+		version: string,
+		occurredAt: Date,
+		exchange: string,
+		routingKey: string,
+		source: string,
+		retryCount: number,
+		error: string | null,
+		createdAt: Date,
+		processedAt: Date | null
+	): Outbox {
+		const outbox = new Outbox(
+			eventType,
+			payload,
+			correlationId,
+			version,
+			occurredAt,
+			exchange,
+			routingKey,
+			source
+		);
+		outbox.setId(eventId);
+		outbox.setWasUpdated(false);
+		outbox.retryCount = retryCount;
+		outbox.error = error;
+		outbox.createdAt = createdAt;
+		outbox.processedAt = processedAt;
+		return outbox;
+	}
+
 	private eventType: string;
 	private payload: unknown;
 	private correlationId?: string;
@@ -56,40 +74,6 @@ export class Outbox extends Entity<DomainEvent> {
 		this.createdAt = new Date();
 		this.processedAt = null;
 		this.wasUpdated = true;
-	}
-
-	static loadOutboxEvent(
-		eventId: string,
-		eventType: string,
-		payload: any,
-		correlationId: string | undefined,
-		version: string,
-		occurredAt: Date,
-		exchange: string,
-		routingKey: string,
-		source: string,
-		retryCount: number,
-		error: string | null,
-		createdAt: Date,
-		processedAt: Date | null
-	): Outbox {
-		const outbox = new Outbox(
-			eventType,
-			payload,
-			correlationId,
-			version,
-			occurredAt,
-			exchange,
-			routingKey,
-			source
-		);
-		outbox.setId(eventId);
-		outbox.setWasUpdated(false);
-		outbox.retryCount = retryCount;
-		outbox.error = error;
-		outbox.createdAt = createdAt;
-		outbox.processedAt = processedAt;
-		return outbox;
 	}
 
 	public getEventId(): string {

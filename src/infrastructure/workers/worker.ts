@@ -10,6 +10,7 @@ import { RedisClientProvider } from "../data-access/redis/redis-client.provider"
 import type { IncomingIntegrationEvent } from "../events/IntegrationEvents";
 import { RabbitMQIntegrationEventMapper } from "../events/RabbitMQIntegrationEventMapper";
 import { RabbitMQMessagingService } from "../messaging/adapters/RabbitMQMessagingService";
+import { PostgreEventRepository } from "../data-access/postgres/repositories/PostgreEventRepository";
 
 interface NormalizedOrderEvent {
 	eventId: string;
@@ -47,6 +48,7 @@ class OrderProcessingWorker {
 		const outboxRepository = new PostgreOutboxRepository();
 		const updateOrderStatusUseCase = new UpdateOrderStatusUseCase();
 		const integrationEventMapper = new RabbitMQIntegrationEventMapper();
+    const eventRepository = new PostgreEventRepository()
 
 		const orderProcessManager = new OrderProcessManager(
 			orderRepository,
@@ -69,7 +71,8 @@ class OrderProcessingWorker {
 			orderProcessManager,
 			postgresTransactionManager,
 			outboxRepository,
-			integrationEventMapper
+			integrationEventMapper,
+      eventRepository
 		);
 
 		this.messagingService = new RabbitMQMessagingService();

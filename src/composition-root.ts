@@ -7,6 +7,7 @@ import { GetOrdersByCustomerIdUseCase } from "./application/use-cases/GetOrdersB
 import { ProcessOutboxUseCase } from "./application/use-cases/ProcessOutboxUseCase";
 import { UpdateOrderStatusUseCase } from "./application/use-cases/UpdateOrderStatusUseCase";
 import { PostgresTransactionManager } from "./infrastructure/data-access/postgres/PostgresTransactionManager";
+import { PostgreEventRepository } from "./infrastructure/data-access/postgres/repositories/PostgreEventRepository";
 import { PostgreOrderRepository } from "./infrastructure/data-access/postgres/repositories/PostgreOrderRepository";
 import { PostgreOutboxRepository } from "./infrastructure/data-access/postgres/repositories/PostgreOutboxRepository";
 import { RedisOrderCheckRepository } from "./infrastructure/data-access/redis/RedisOrderCheckRepository";
@@ -41,11 +42,7 @@ export class CompositionRoot {
 		const updateOrderStatusUseCase = new UpdateOrderStatusUseCase();
 
 		const outboxRepository = new PostgreOutboxRepository();
-
-		const processOutboxUseCase = new ProcessOutboxUseCase(
-			outboxRepository,
-			messagingService
-		);
+		const eventRepository = new PostgreEventRepository();
 
 		const orderProcessManager = new OrderProcessManager(
 			orderRepository,
@@ -65,7 +62,8 @@ export class CompositionRoot {
 			orderProcessManager,
 			postgresTransactionManager,
 			outboxRepository,
-			integrationEvenMapper
+			integrationEvenMapper,
+			eventRepository
 		);
 	}
 }
