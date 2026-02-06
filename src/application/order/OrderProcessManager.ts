@@ -1,8 +1,4 @@
-import {
-	type CancellationReason,
-	type OrderDomainEvent,
-	OrderStatus,
-} from "@alejotamayo28/event-contracts";
+import { type CancellationReason, OrderStatus } from "@alejotamayo28/event-contracts";
 import type { Order } from "@/domain/entities/Order";
 import { Outbox } from "@/domain/entities/Outbox";
 import type { OrderRepository } from "@/domain/repositories/OrderRepository";
@@ -12,19 +8,11 @@ import type {
 } from "@/infrastructure/events/IntegrationEvents";
 import type { EventRepository } from "../ports/EventRepository";
 import type { IntegrationEventMapper } from "../ports/IntegrationEventMapper";
-import type { OrderCheckRepository, OrderChecks } from "../ports/OrderCheckRepository";
 import type { OutboxRepository } from "../ports/OutboxRepository";
 import type { TransactionManager } from "../ports/TransactionManager";
-import type { UpdateOrderStatusUseCase } from "../use-cases/UpdateOrderStatusUseCase";
-
-interface OrderProcessContext {
-	order: Order;
-	checkState: OrderChecks;
-	domainEvents: OrderDomainEvent[];
-}
+import type { OrderProjection, OrderState } from "../projections/OrderProjection";
 
 export type PaymentStatus = "pending" | "approved" | "rejected";
-
 export type InventoryStatus = "pending" | "reserved" | "unavailable";
 
 export class OrderProcessManager {
@@ -32,9 +20,8 @@ export class OrderProcessManager {
 
 	constructor(
 		private readonly orderRepository: OrderRepository,
-		private readonly orderCheckRepository: OrderCheckRepository,
+		private readonly orderProjection: OrderProjection,
 		private readonly transactionManager: TransactionManager,
-		private readonly updateOrderStatus: UpdateOrderStatusUseCase,
 		private readonly outboxRepository: OutboxRepository,
 		private readonly integrationEventMapper: IntegrationEventMapper,
 		private readonly eventRepository: EventRepository
@@ -46,125 +33,137 @@ export class OrderProcessManager {
 		status: "pending" | "completed" | "failed"
 	): Promise<void> {
 		await this.transactionManager.runInTransaction(async () => {
-			await this.updateChecks(eventMessage, checkType, status);
-			await this.processOrder<T>(eventMessage);
+			await this.saveExternalEvent(eventMessage, checkType, status);
+
+			const orderId = eventMessage.payload.orderId;
+			const state = await this.orderProjection.reconstruct(orderId);
+
+			if (!state) {
+				throw new Error(`NO_STATE_FOUND_FOR_ORDER_${orderId}`);
+			}
+
+			const order = await this.orderRepository.findById(orderId);
+			if (!order) {
+				throw new Error(`ORDER_NOT_FOUND_${orderId}`);
+			}
+
+			await this.applyBusinessLogic(order, state);
+			await this.appendDomainEvents(order);
+			await this.orderProjection.update(order);
+			await this.createOutboxEntries(order);
+
+			order.clearDomainEvents();
 		});
 	}
 
-	private async processOrder<T extends IncomingEvents>(
-		eventMessage: IncomingIntegrationEvent<T>
+	private async saveExternalEvent<T extends IncomingEvents>(
+		eventMessage: IncomingIntegrationEvent<T>,
+		checkType: "paymentCheck" | "inventoryCheck",
+		status: "pending" | "completed" | "failed"
 	): Promise<void> {
-		const context = await this.loadContext(eventMessage.payload.orderId);
-		if (!context) return;
+		const orderId = eventMessage.payload.orderId;
+		const order = await this.orderRepository.findById(orderId);
 
-		await this.updateOrderStatus.execute(eventMessage, context.order);
-
-		const updatedCheckState = await this.orderCheckRepository.get(
-			eventMessage.payload.orderId
-		);
-		if (updatedCheckState) {
-			context.checkState = updatedCheckState;
+		if (!order) {
+			throw new Error(`ORDER_NOT_FOUND_${orderId}`);
 		}
 
-		this.decide(context);
-		await this.apply(context);
+		if (checkType === "paymentCheck") {
+			if (status === "completed") {
+				order.markPaymentDeductionCompleted();
+			} else if (status === "failed") {
+				const reason = this.extractReasonFromPayload(eventMessage);
+				order.markPaymentVerificationFailed(reason);
+			}
+		} else {
+			if (status === "completed") {
+				order.markInventoryReservationCompleted();
+			} else if (status === "failed") {
+				const reason = this.extractReasonFromPayload(eventMessage);
+				order.markInventoryReservationFailed(reason);
+			}
+		}
+
+		const lastEvent = await this.eventRepository.getLastVersion(orderId);
+		const lastVersion = lastEvent?.getVersion() ?? 0;
+		await this.eventRepository.append(order, lastVersion);
+
+		order.clearDomainEvents();
 	}
 
-	private async loadContext(orderId: string): Promise<OrderProcessContext | null> {
-		const checkState = await this.orderCheckRepository.get(orderId);
-		if (!checkState) return null;
-
-		const order = await this.orderRepository.findById(orderId);
-		if (!order) return null;
-
-		return {
-			order,
-			checkState,
-			domainEvents: [],
-		};
-	}
-
-	private decide(context: OrderProcessContext): void {
-		const { order, checkState } = context;
-		const { payment, inventory, paymentReason, inventoryReason } = checkState;
-
-		if (this.hasPending(payment, inventory)) {
-			if (this.isOrderStale(checkState)) {
-				this.applyTimeout(checkState);
+	private async applyBusinessLogic(order: Order, state: OrderState): Promise<void> {
+		if (state.hasPending) {
+			if (this.isOrderStale(state)) {
+				this.applyTimeout(order, state);
 			}
 			return;
 		}
 
-		if (payment === "approved" && inventory === "reserved") {
+		if (state.payment === "approved" && state.inventory === "reserved") {
 			order.transitionTo(OrderStatus.CONFIRMED);
+		} else if (state.payment === "rejected" || state.inventory === "unavailable") {
+			this.reconstructCancellationReasons(
+				order,
+				state.paymentReason as CancellationReason | null,
+				state.inventoryReason as CancellationReason | null
+			);
+			order.cancel(state.payment, state.inventory);
+		}
+	}
+
+	private async appendDomainEvents(order: Order): Promise<void> {
+		if (order.getDomainEvents().length === 0) {
 			return;
 		}
 
-		if (payment === "rejected" || inventory === "unavailable") {
-			this.reconstructCancellationReasons(order, paymentReason, inventoryReason);
-			order.transitionTo(OrderStatus.CANCELLED, {
-				paymentStatus: payment,
-				inventoryStatus: inventory,
-			});
-		}
+		const lastEvent = await this.eventRepository.getLastVersion(order.getId());
+		const lastVersion = lastEvent?.getVersion() ?? 0;
+
+		await this.eventRepository.append(order, lastVersion);
 	}
 
-	private async apply(context: OrderProcessContext): Promise<void> {
-		const { order } = context;
-
-		if (order.getWasUpdated()) {
-			await this.orderRepository.update(order);
+	private async createOutboxEntries(order: Order): Promise<void> {
+		const domainEvents = order.getDomainEvents();
+		if (domainEvents.length === 0) {
+			return;
 		}
 
-		if (order.getDomainEvents().length > 0) {
-			const lastEvent = await this.eventRepository.getLastVersion(order.getId());
-			const lastVersion = lastEvent?.getVersion() ?? 0;
+		const integrationEvents = domainEvents.map((event) => {
+			const mapped = this.integrationEventMapper.map(event);
+			if (!mapped) {
+				throw new Error("NO_MAPPER_FOUND_FOR_EVENT");
+			}
+			return mapped;
+		});
 
-			await this.eventRepository.append(order, lastVersion);
+		const outboxes = integrationEvents.map(
+			(event) =>
+				new Outbox(
+					event.eventType,
+					event.payload,
+					event.correlationId,
+					event.version,
+					new Date(event.occurredAt),
+					event.exchange,
+					event.routingKey,
+					event.source
+				)
+		);
 
-			const integrationEvents = order.getDomainEvents().map((event) => {
-				const mapped = this.integrationEventMapper.map(event);
-				if (!mapped) {
-					throw new Error("NO_MAPPER_FOUND_FOR_EVENT");
-				}
-				return mapped;
-			});
+		await this.outboxRepository.saveMany(outboxes);
+	}
 
-			const outboxes = integrationEvents.map(
-				(event) =>
-					new Outbox(
-						event.eventType,
-						event.payload,
-						event.correlationId,
-						event.version,
-						new Date(event.occurredAt),
-						event.exchange,
-						event.routingKey,
-						event.source
-					)
-			);
+	private isOrderStale(state: OrderState): boolean {
+		return Date.now() - state.createdAt.getTime() >= OrderProcessManager.ORDER_TIMEOUT_MS;
+	}
 
-			await this.outboxRepository.saveMany(outboxes);
-
-			order.clearDomainEvents();
+	private applyTimeout(order: Order, state: OrderState): void {
+		if (state.payment === "pending") {
+			order.markPaymentVerificationFailed("TIMEOUT");
 		}
-
-		if (!this.hasPending(context.checkState.payment, context.checkState.inventory)) {
-			await this.orderCheckRepository.delete(order.getId());
+		if (state.inventory === "pending") {
+			order.markInventoryReservationFailed("TIMEOUT");
 		}
-	}
-
-	private hasPending(payment: PaymentStatus, inventory: InventoryStatus): boolean {
-		return payment === "pending" || inventory === "pending";
-	}
-
-	private isOrderStale(state: OrderChecks): boolean {
-		return Date.now() - state.createdAt >= OrderProcessManager.ORDER_TIMEOUT_MS;
-	}
-
-	private applyTimeout(state: OrderChecks): void {
-		if (state.payment === "pending") state.payment = "rejected";
-		if (state.inventory === "pending") state.inventory = "unavailable";
 	}
 
 	private reconstructCancellationReasons(
@@ -172,48 +171,18 @@ export class OrderProcessManager {
 		paymentReason?: CancellationReason | null,
 		inventoryReason?: CancellationReason | null
 	): void {
-		const reasons: CancellationReason[] = [];
-
 		if (paymentReason) {
-			reasons.push(paymentReason);
+			order.addCancellationReasons(paymentReason);
 		}
-
 		if (inventoryReason) {
-			reasons.push(inventoryReason);
-		}
-
-		if (reasons.length > 0) {
-			for (const reason of reasons) {
-				order.addCancellationReasons(reason);
-			}
+			order.addCancellationReasons(inventoryReason);
 		}
 	}
 
-	private async updateChecks<T extends IncomingEvents>(
-		eventMessage: IncomingIntegrationEvent<T>,
-		checkType: "paymentCheck" | "inventoryCheck",
-		status: "pending" | "completed" | "failed"
-	): Promise<void> {
-		const orderId = eventMessage.payload.orderId;
-
-		if (checkType === "paymentCheck") {
-			const paymentStatus: PaymentStatus =
-				status === "completed"
-					? "approved"
-					: status === "failed"
-						? "rejected"
-						: "pending";
-
-			await this.orderCheckRepository.updatePaymentCheck(orderId, paymentStatus);
-		} else {
-			const inventoryStatus: InventoryStatus =
-				status === "completed"
-					? "reserved"
-					: status === "failed"
-						? "unavailable"
-						: "pending";
-
-			await this.orderCheckRepository.updateInventoryCheck(orderId, inventoryStatus);
-		}
+	private extractReasonFromPayload<T extends IncomingEvents>(
+		eventMessage: IncomingIntegrationEvent<T>
+	): string {
+		const payload = eventMessage.payload as any;
+		return payload?.reason || payload?.error || "UNKNOWN_REASON";
 	}
 }

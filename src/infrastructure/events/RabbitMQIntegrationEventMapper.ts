@@ -3,6 +3,7 @@ import { v7 as uuid } from "uuid";
 import type { IntegrationEventMapper } from "@/application/ports/IntegrationEventMapper";
 import type { OutgoingIntegrationEvent } from "@/infrastructure/events/IntegrationEvents";
 
+//to-do: Corregir esta monda (se guarda dentro de outbox)
 export class RabbitMQIntegrationEventMapper implements IntegrationEventMapper {
 	map(event: OrderDomainEvent): OutgoingIntegrationEvent | null {
 		const mapping = this.getMainEventMapping(event);
@@ -59,6 +60,18 @@ export class RabbitMQIntegrationEventMapper implements IntegrationEventMapper {
 			ORDER_INVENTORY_RESERVATION_FAILED: {
 				exchange: "order_events",
 				routingKey: "inventory.reservation.order.failed",
+			},
+			ORDER_PAYMENT_DEDUCTION_COMPLETED: {
+				exchange: "order_events",
+				routingKey: "payment.deduction.completed",
+			},
+			ORDER_INVENTORY_RESERVATION_COMPLETED: {
+				exchange: "order_events",
+				routingKey: "inventory.reservation.completed",
+			},
+			ORDER_COMPENSATION_STARTED: {
+				exchange: "order_events",
+				routingKey: "status.compensation.started",
 			},
 		};
 

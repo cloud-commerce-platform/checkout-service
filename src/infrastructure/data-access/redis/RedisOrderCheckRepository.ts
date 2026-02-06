@@ -18,7 +18,7 @@ export class RedisOrderCheckRepository implements OrderCheckRepository {
 			inventory: "pending",
 			paymentReason: "",
 			inventoryReason: "",
-			createdAt: Date.now().toString(),
+			createdAt: new Date().toISOString(),
 		});
 
 		await this.client.expire(key, 600);
@@ -39,7 +39,7 @@ export class RedisOrderCheckRepository implements OrderCheckRepository {
 			inventoryReason: data.inventoryReason
 				? (data.inventoryReason as CancellationReason)
 				: null,
-			createdAt: Number(data.createdAt),
+			createdAt: new Date(data.createdAt),
 		};
 	}
 

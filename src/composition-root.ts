@@ -1,32 +1,24 @@
 import { OrderProcessManager } from "./application/order/OrderProcessManager";
 import type { MessagingService } from "./application/ports/MessagingService";
+import { OrderProjection } from "./application/projections/OrderProjection";
 import { OrderService } from "./application/services/OrderService";
 import { CreateOrderUseCase } from "./application/use-cases/CreateOrderUseCase";
 import { GetOrderByIdUseCase } from "./application/use-cases/GetOrderByIdUseCase";
+import { GetOrderEventsUseCase } from "./application/use-cases/GetOrderEventsUseCase";
 import { GetOrdersByCustomerIdUseCase } from "./application/use-cases/GetOrdersByCustomerIdUseCase";
-import { ProcessOutboxUseCase } from "./application/use-cases/ProcessOutboxUseCase";
-import { UpdateOrderStatusUseCase } from "./application/use-cases/UpdateOrderStatusUseCase";
 import { PostgresTransactionManager } from "./infrastructure/data-access/postgres/PostgresTransactionManager";
 import { PostgreEventRepository } from "./infrastructure/data-access/postgres/repositories/PostgreEventRepository";
 import { PostgreOrderRepository } from "./infrastructure/data-access/postgres/repositories/PostgreOrderRepository";
 import { PostgreOutboxRepository } from "./infrastructure/data-access/postgres/repositories/PostgreOutboxRepository";
-import { RedisOrderCheckRepository } from "./infrastructure/data-access/redis/RedisOrderCheckRepository";
-import { RedisClientProvider } from "./infrastructure/data-access/redis/redis-client.provider";
 import { RabbitMQIntegrationEventMapper } from "./infrastructure/events/RabbitMQIntegrationEventMapper";
-import { RabbitMQDomainEventDispatcher } from "./infrastructure/messaging/adapters/rabbitMQDomainEventDispatcher";
 
 export class CompositionRoot {
 	static async configure(messagingService: MessagingService): Promise<OrderService> {
-		// Bb (PostgreSQL)
+		// Db (PostgreSQL)
 		const orderRepository = new PostgreOrderRepository();
 		const postgresTransactionManager = new PostgresTransactionManager();
 
-		// Cache (Redis)
-		const redisClient = await RedisClientProvider.getClient();
-		const redisOrderCheckRepository = new RedisOrderCheckRepository(redisClient);
-
-		//Messaging (RabbitMQ)
-		const domainEventDispatcher = new RabbitMQDomainEventDispatcher(messagingService);
+		// Messaging (RabbitMQ)
 		const integrationEvenMapper = new RabbitMQIntegrationEventMapper();
 
 		// Use cases
@@ -39,18 +31,22 @@ export class CompositionRoot {
 			orderRepository,
 			postgresTransactionManager
 		);
-		const updateOrderStatusUseCase = new UpdateOrderStatusUseCase(
-			redisOrderCheckRepository
-		);
 
 		const outboxRepository = new PostgreOutboxRepository();
 		const eventRepository = new PostgreEventRepository();
 
+		const getOrderEventsUseCase = new GetOrderEventsUseCase(
+			eventRepository,
+			postgresTransactionManager
+		);
+
+		// Proyección para Event Sourcing
+		const orderProjection = new OrderProjection(eventRepository, orderRepository);
+
 		const orderProcessManager = new OrderProcessManager(
 			orderRepository,
-			redisOrderCheckRepository,
+			orderProjection,
 			postgresTransactionManager,
-			updateOrderStatusUseCase,
 			outboxRepository,
 			integrationEvenMapper,
 			eventRepository
@@ -61,12 +57,12 @@ export class CompositionRoot {
 			createOrderUseCase,
 			getOrderByIdUseCase,
 			getOrdersByCustomerIdUseCase,
-			redisOrderCheckRepository,
 			orderProcessManager,
 			postgresTransactionManager,
 			outboxRepository,
 			integrationEvenMapper,
-			eventRepository
+			eventRepository,
+			getOrderEventsUseCase
 		);
 	}
 }

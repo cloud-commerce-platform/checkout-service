@@ -3,14 +3,9 @@ import { Pool, type PoolClient } from "pg";
 
 dotenv.config();
 
-const connectionString =
-	process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/postgres";
-
-const isProd = process.env.NODE_ENV === "production";
-
 export const pool = new Pool({
-	connectionString,
-	ssl: isProd ? { rejectUnauthorized: false } : false,
+	connectionString: process.env.DATABASE_URL,
+	ssl: process.env.DATABASE_SSL === "true" ? { rejectUnauthorized: false } : false,
 });
 
 export const newSession = async (): Promise<PoolClient> => {

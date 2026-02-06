@@ -1,10 +1,6 @@
 import type {
-	OrderCompletedEvent,
-	OrderConfirmedEvent,
-	OrderCreatedEvent,
+	CancellationReason,
 	OrderDomainEvent,
-	OrderInventoryRollbackEvent,
-	OrderPaymentRollbackEvent,
 	OrderStatus,
 } from "@alejotamayo28/event-contracts";
 import type {
@@ -17,10 +13,12 @@ export type CancelContext = {
 	paymentStatus: PaymentStatus;
 	inventoryStatus: InventoryStatus;
 	previousStatus?: OrderStatus;
+	requiresPaymentRefund?: boolean;
+	requiresInventoryRollback?: boolean;
 };
 
 export class OrderEvents {
-	static created(order: Order): OrderCreatedEvent {
+	static created(order: Order): OrderDomainEvent {
 		return {
 			type: "ORDER_CREATED",
 			timestamp: new Date(),
@@ -36,7 +34,7 @@ export class OrderEvents {
 		};
 	}
 
-	static confirmed(order: Order): OrderConfirmedEvent {
+	static confirmed(order: Order): OrderDomainEvent {
 		return {
 			type: "ORDER_CONFIRMED",
 			timestamp: new Date(),
@@ -51,7 +49,7 @@ export class OrderEvents {
 		};
 	}
 
-	static completed(order: Order): OrderCompletedEvent {
+	static completed(order: Order): OrderDomainEvent {
 		return {
 			type: "ORDER_COMPLETED",
 			timestamp: new Date(),
@@ -65,54 +63,41 @@ export class OrderEvents {
 		};
 	}
 
-	static cancelled(order: Order, cancelContext: CancelContext): OrderDomainEvent[] {
+	static cancelled(order: Order, cancelContext: CancelContext): OrderDomainEvent {
 		if (!cancelContext.previousStatus) {
 			throw new Error("PREVIOUS_STATE_ON_CANCEL_CONTEXT_REQUIRED");
 		}
-		const events: OrderDomainEvent[] = [];
-		events.push({
+
+		const now = new Date();
+
+		const needsPaymentRollback = order.needsPaymentRollback(
+			cancelContext.paymentStatus,
+			cancelContext.inventoryStatus
+		);
+
+		const needsInventoryRollback = order.needsInventoryRollback(
+			cancelContext.paymentStatus,
+			cancelContext.inventoryStatus
+		);
+
+		return {
 			type: "ORDER_CANCELLED",
-			timestamp: new Date(),
+			timestamp: now,
 			aggregateId: order.getId(),
 			aggregateType: "Order",
 			data: {
 				orderId: order.getId(),
-				cancelledAt: new Date(),
+				cancelledAt: now,
 				cancelledBy: "system",
-				reason: "",
+				reason: order.getCancellationReasons(),
 				previousStatus: cancelContext.previousStatus,
-				requiresRefund: order.needsPaymentRollback(
-					cancelContext.paymentStatus,
-					cancelContext.inventoryStatus
-				),
-				requiresInventoryRollback: order.needsInventoryRollback(
-					cancelContext.paymentStatus,
-					cancelContext.inventoryStatus
-				),
+				requiresRefund: needsPaymentRollback,
+				requiresInventoryRollback: needsInventoryRollback,
 			},
-		});
-
-		if (
-			order.needsPaymentRollback(
-				cancelContext.paymentStatus,
-				cancelContext.inventoryStatus
-			)
-		) {
-			events.push(OrderEvents.paymentRollbackRequested(order));
-		}
-
-		if (
-			order.needsInventoryRollback(
-				cancelContext.paymentStatus,
-				cancelContext.inventoryStatus
-			)
-		) {
-			events.push(OrderEvents.inventoryRollbackRequested(order));
-		}
-		return events;
+		};
 	}
 
-	static paymentRollbackRequested(order: Order): OrderPaymentRollbackEvent {
+	static paymentRollbackRequested(order: Order): OrderDomainEvent {
 		return {
 			type: "ORDER_PAYMENT_ROLLBACK_REQUESTED",
 			timestamp: new Date(),
@@ -124,7 +109,7 @@ export class OrderEvents {
 		};
 	}
 
-	static inventoryRollbackRequested(order: Order): OrderInventoryRollbackEvent {
+	static inventoryRollbackRequested(order: Order): OrderDomainEvent {
 		return {
 			type: "ORDER_INVENTORY_ROLLBACK_REQUESTED",
 			timestamp: new Date(),
@@ -132,5 +117,106 @@ export class OrderEvents {
 			aggregateType: "Order",
 			data: { orderId: order.getId() },
 		};
+	}
+
+	static inventoryReservationFailed(
+		order: Order,
+		reason: CancellationReason
+	): OrderDomainEvent {
+		return {
+			type: "ORDER_INVENTORY_RESERVATION_FAILED",
+			timestamp: new Date(),
+			aggregateId: order.getId(),
+			aggregateType: "Order",
+			data: {
+				orderId: order.getId(),
+				reason: reason,
+				failedAt: new Date(),
+			},
+		};
+	}
+
+	static paymentVerificationFailed(
+		order: Order,
+		reason: CancellationReason
+	): OrderDomainEvent {
+		return {
+			type: "ORDER_PAYMENT_VERIFICATION_FAILED",
+			timestamp: new Date(),
+			aggregateId: order.getId(),
+			aggregateType: "Order",
+			data: {
+				orderId: order.getId(),
+				reason: reason,
+				failedAt: new Date(),
+			},
+		};
+	}
+
+	static paymentDeductionCompleted(order: Order): OrderDomainEvent {
+		return {
+			type: "ORDER_PAYMENT_DEDUCTION_COMPLETED",
+			timestamp: new Date(),
+			aggregateId: order.getId(),
+			aggregateType: "Order",
+			data: {
+				orderId: order.getId(),
+				completedAt: new Date(),
+			},
+		};
+	}
+
+	static inventoryReservationCompleted(order: Order): OrderDomainEvent {
+		return {
+			type: "ORDER_INVENTORY_RESERVATION_COMPLETED",
+			timestamp: new Date(),
+			aggregateId: order.getId(),
+			aggregateType: "Order",
+			data: {
+				orderId: order.getId(),
+				completedAt: new Date(),
+			},
+		};
+	}
+
+	static compensationStarted(
+		order: Order,
+		cancelContext: CancelContext
+	): OrderDomainEvent[] {
+		if (
+			cancelContext.requiresInventoryRollback === undefined ||
+			cancelContext.requiresPaymentRefund === undefined
+		) {
+			throw new Error("COMPENSATION_CONTEXT_FLAGS_REQUIRED");
+		}
+
+		if (
+			!cancelContext.requiresInventoryRollback &&
+			!cancelContext.requiresPaymentRefund
+		) {
+			throw new Error("ORDER_COMPENSATION_WITHOUT_REQUIRED_ROLLBACK");
+		}
+
+		const events: OrderDomainEvent[] = [];
+
+		events.push({
+			type: "ORDER_COMPENSATION_STARTED",
+			timestamp: new Date(),
+			aggregateId: order.getId(),
+			aggregateType: "Order",
+			data: {
+				orderId: order.getId(),
+			},
+		});
+
+		if (cancelContext.requiresPaymentRefund) {
+			events.push(OrderEvents.paymentRollbackRequested(order));
+		}
+
+		if (cancelContext.requiresInventoryRollback) {
+			events.push(OrderEvents.inventoryRollbackRequested(order));
+		}
+
+		return events;
 	}
 }

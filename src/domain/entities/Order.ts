@@ -22,7 +22,12 @@ export const ORDER_STATE_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 
 	[OrderStatus.CONFIRMED]: [OrderStatus.COMPLETED, OrderStatus.CANCELLED],
 
-	[OrderStatus.CANCELLED]: [],
+	[OrderStatus.CANCELLED]: [OrderStatus.COMPENSATION_PENDING, OrderStatus.COMPENSATED],
+
+	[OrderStatus.COMPENSATION_PENDING]: [OrderStatus.COMPENSATED],
+
+	[OrderStatus.COMPENSATED]: [],
+
 	[OrderStatus.COMPLETED]: [],
 };
 
@@ -98,11 +103,15 @@ export class Order extends Entity<OrderDomainEvent> {
 				return OrderEvents.completed(this);
 
 			case OrderStatus.CANCELLED:
-				if (!context) {
-					throw new Error("CANCEL_CONTEXT_REQUIRED");
-				}
-
+				if (!context) throw new Error("CANCEL_CONTEXT_REQUIRED");
 				return OrderEvents.cancelled(this, {
+					...context,
+					previousStatus,
+				});
+
+			case OrderStatus.COMPENSATION_PENDING:
+				if (!context) throw new Error("CANCEL_CONTEXT_REQUIRED");
+				return OrderEvents.compensationStarted(this, {
 					...context,
 					previousStatus,
 				});
@@ -120,6 +129,32 @@ export class Order extends Entity<OrderDomainEvent> {
 	public markPaymentAsFailed(reason: CancellationReason): void {
 		this.addCancellationReasons(reason);
 		this.wasUpdated = true;
+	}
+
+	public markInventoryReservationFailed(reason: string): void {
+		this.addCancellationReasons(reason as CancellationReason);
+		this.wasUpdated = true;
+		this.addDomainEvent(
+			OrderEvents.inventoryReservationFailed(this, reason as CancellationReason)
+		);
+	}
+
+	public markPaymentVerificationFailed(reason: string): void {
+		this.addCancellationReasons(reason as CancellationReason);
+		this.wasUpdated = true;
+		this.addDomainEvent(
+			OrderEvents.paymentVerificationFailed(this, reason as CancellationReason)
+		);
+	}
+
+	public markPaymentDeductionCompleted(): void {
+		this.wasUpdated = true;
+		this.addDomainEvent(OrderEvents.paymentDeductionCompleted(this));
+	}
+
+	public markInventoryReservationCompleted(): void {
+		this.wasUpdated = true;
+		this.addDomainEvent(OrderEvents.inventoryReservationCompleted(this));
 	}
 
 	public needsPaymentRollback(
@@ -140,6 +175,39 @@ export class Order extends Entity<OrderDomainEvent> {
 			inventoryStatus === "reserved" &&
 			(paymentStatus === "rejected" || this.status === OrderStatus.CANCELLED)
 		);
+	}
+
+	public cancel(paymentStatus: PaymentStatus, inventoryStatus: InventoryStatus) {
+		const requiresPaymentRefund = this.needsPaymentRollback(
+			paymentStatus,
+			inventoryStatus
+		);
+		const requiresInventoryRollback = this.needsInventoryRollback(
+			paymentStatus,
+			inventoryStatus
+		);
+
+		const context: CancelContext = {
+			paymentStatus,
+			inventoryStatus,
+			requiresPaymentRefund,
+			requiresInventoryRollback,
+		};
+
+		this.transitionTo(OrderStatus.CANCELLED, context);
+		if (this.requiresCompensation(context)) {
+			this.transitionTo(OrderStatus.COMPENSATION_PENDING, context);
+		}
+	}
+
+	private requiresCompensation(context: CancelContext): boolean {
+		if (
+			context.requiresInventoryRollback === undefined ||
+			context.requiresPaymentRefund === undefined
+		) {
+			throw new Error("CANCEL_CONTEXT_ROLLBACK_FLAGS_REQUIRED");
+		}
+		return context.requiresInventoryRollback || context.requiresPaymentRefund;
 	}
 
 	public calculateTotal(): number {

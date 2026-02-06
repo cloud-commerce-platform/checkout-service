@@ -1,13 +1,11 @@
 import { createClient } from "redis";
 import { OrderProcessManager } from "../../application/order/OrderProcessManager";
+import { OrderProjection } from "../../application/projections/OrderProjection";
 import { OrderService } from "../../application/services/OrderService";
-import { UpdateOrderStatusUseCase } from "../../application/use-cases/UpdateOrderStatusUseCase";
 import { PostgresTransactionManager } from "../data-access/postgres/PostgresTransactionManager";
 import { PostgreEventRepository } from "../data-access/postgres/repositories/PostgreEventRepository";
 import { PostgreOrderRepository } from "../data-access/postgres/repositories/PostgreOrderRepository";
 import { PostgreOutboxRepository } from "../data-access/postgres/repositories/PostgreOutboxRepository";
-import { RedisOrderCheckRepository } from "../data-access/redis/RedisOrderCheckRepository";
-import { RedisClientProvider } from "../data-access/redis/redis-client.provider";
 import type { IncomingIntegrationEvent } from "../events/IntegrationEvents";
 import { RabbitMQIntegrationEventMapper } from "../events/RabbitMQIntegrationEventMapper";
 import { RabbitMQMessagingService } from "../messaging/adapters/RabbitMQMessagingService";
@@ -43,20 +41,17 @@ class OrderProcessingWorker {
 
 		const orderRepository = new PostgreOrderRepository();
 		const postgresTransactionManager = new PostgresTransactionManager();
-		const redisClient = await RedisClientProvider.getClient();
-		const redisOrderCheckRepository = new RedisOrderCheckRepository(redisClient);
 		const outboxRepository = new PostgreOutboxRepository();
-		const updateOrderStatusUseCase = new UpdateOrderStatusUseCase(
-			redisOrderCheckRepository
-		);
 		const integrationEventMapper = new RabbitMQIntegrationEventMapper();
 		const eventRepository = new PostgreEventRepository();
 
+		// Proyección para Event Sourcing
+		const orderProjection = new OrderProjection(eventRepository, orderRepository);
+
 		const orderProcessManager = new OrderProcessManager(
 			orderRepository,
-			redisOrderCheckRepository,
+			orderProjection,
 			postgresTransactionManager,
-			updateOrderStatusUseCase,
 			outboxRepository,
 			integrationEventMapper,
 			eventRepository
@@ -65,17 +60,18 @@ class OrderProcessingWorker {
 		const createOrderUseCase = {} as any;
 		const getOrderByIdUseCase = {} as any;
 		const getOrdersByCustomerIdUseCase = {} as any;
+		const getOrderEventsUseCase = {} as any;
 
 		this.orderService = new OrderService(
 			createOrderUseCase,
 			getOrderByIdUseCase,
 			getOrdersByCustomerIdUseCase,
-			redisOrderCheckRepository,
 			orderProcessManager,
 			postgresTransactionManager,
 			outboxRepository,
 			integrationEventMapper,
-			eventRepository
+			eventRepository,
+			getOrderEventsUseCase
 		);
 
 		this.messagingService = new RabbitMQMessagingService();

@@ -53,6 +53,56 @@
 				],
 				"type": "object",
 				"additionalProperties": false
+			},
+			"OrderEventResponse": {
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"aggregateId": {
+						"type": "string"
+					},
+					"type": {
+						"type": "string"
+					},
+					"version": {
+						"type": "number",
+						"format": "double"
+					},
+					"payload": {},
+					"createdAt": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"id",
+					"aggregateId",
+					"type",
+					"version",
+					"payload",
+					"createdAt"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"OrderEventsResponse": {
+				"properties": {
+					"orderId": {
+						"type": "string"
+					},
+					"events": {
+						"items": {
+							"$ref": "#/components/schemas/OrderEventResponse"
+						},
+						"type": "array"
+					}
+				},
+				"required": [
+					"orderId",
+					"events"
+				],
+				"type": "object",
+				"additionalProperties": false
 			}
 		},
 		"securitySchemes": {}
@@ -68,6 +118,33 @@
 	},
 	"openapi": "3.0.0",
 	"paths": {
+		"/health": {
+			"get": {
+				"operationId": "HealthCheckpoint",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"status": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"status"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": []
+			}
+		},
 		"/orders": {
 			"post": {
 				"operationId": "CreateOrder",
@@ -99,6 +176,34 @@
 						"content": {
 							"application/json": {
 								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				]
+			}
+		},
+		"/orders/{id}/events": {
+			"get": {
+				"operationId": "GetOrderEvents",
+				"responses": {
+					"200": {
+						"description": "Events found",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OrderEventsResponse"
+								}
 							}
 						}
 					}

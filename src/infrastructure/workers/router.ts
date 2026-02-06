@@ -105,19 +105,12 @@ async function startEventRouter() {
 
 		try {
 			const content = JSON.parse(msg.content.toString()) as IncomingEvent;
-			console.log(
-				`Evento de Payment: ${content.eventType} (order: ${content.payload.orderId})`
-			);
-
 			const normalizedEvent = normalizeEvent(content);
 			const routingKey = normalizedEvent.partition.toString();
 
 			await messagingService.publish("order_processing", routingKey, normalizedEvent);
-
-			console.log(`Ruteado a partition ${routingKey}: ${normalizedEvent.eventType}`);
 			channel.ack(msg);
 		} catch (error) {
-			console.error("Error procesando evento de Payment:", error);
 			channel.nack(msg, false, false);
 		}
 	});
@@ -141,17 +134,11 @@ async function startEventRouter() {
 
 		try {
 			const content = JSON.parse(msg.content.toString()) as IncomingEvent;
-			console.log(
-				`Evento de Inventory: ${content.eventType} (order: ${content.payload.orderId})`
-			);
 
 			const normalizedEvent = normalizeEvent(content);
 			const routingKey = normalizedEvent.partition.toString();
 
-			// Publish to consistent-hash exchange
 			await messagingService.publish("order_processing", routingKey, normalizedEvent);
-
-			console.log(`Ruteado a partition ${routingKey}: ${normalizedEvent.eventType}`);
 			channel.ack(msg);
 		} catch (error) {
 			console.error("❌ Error procesando evento de Inventory:", error);

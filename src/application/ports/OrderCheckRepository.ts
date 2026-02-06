@@ -8,7 +8,7 @@ export interface OrderChecks {
 	inventory: InventoryCheckStatus;
 	paymentReason?: CancellationReason | null;
 	inventoryReason?: CancellationReason | null;
-	createdAt: number;
+	createdAt: Date;
 }
 
 export interface OrderCheckRepository {

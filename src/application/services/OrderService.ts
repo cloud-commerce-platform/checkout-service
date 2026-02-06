@@ -1,5 +1,5 @@
-import type { OrderCheckRepository } from "@application/ports/OrderCheckRepository";
 import type { Order } from "@domain/entities/Order";
+import type { Event } from "@/domain/entities/Event";
 import { Outbox } from "@/domain/entities/Outbox";
 import type {
 	IncomingEvents,
@@ -13,6 +13,7 @@ import type { OutboxRepository } from "../ports/OutboxRepository";
 import type { TransactionManager } from "../ports/TransactionManager";
 import type { CreateOrderUseCase } from "../use-cases/CreateOrderUseCase";
 import type { GetOrderByIdUseCase } from "../use-cases/GetOrderByIdUseCase";
+import type { GetOrderEventsUseCase } from "../use-cases/GetOrderEventsUseCase";
 import type { GetOrdersByCustomerIdUseCase } from "../use-cases/GetOrdersByCustomerIdUseCase";
 
 export class OrderService {
@@ -20,12 +21,12 @@ export class OrderService {
 		private readonly createOrderUseCase: CreateOrderUseCase,
 		private readonly getOrderByIdUseCase: GetOrderByIdUseCase,
 		private readonly getOrdersByCustomerIdUseCase: GetOrdersByCustomerIdUseCase,
-		private readonly orderCheckRepository: OrderCheckRepository,
 		private readonly orderProcessManager: OrderProcessManager,
 		private readonly transactionManager: TransactionManager,
 		private readonly outboxRepository: OutboxRepository,
 		private readonly integrationEventMapper: IntegrationEventMapper,
-		private readonly eventRepository: EventRepository
+		private readonly eventRepository: EventRepository,
+		private readonly getOrderEventsUseCase: GetOrderEventsUseCase
 	) {}
 
 	public async getOrderById(id: string): Promise<Order> {
@@ -36,11 +37,13 @@ export class OrderService {
 		return this.getOrdersByCustomerIdUseCase.execute(customerId);
 	}
 
+	public async getOrderEvents(orderId: string): Promise<Event[]> {
+		return this.getOrderEventsUseCase.execute(orderId);
+	}
+
 	public async createOrder(createOrderRequest: CreateOrderRequest): Promise<void> {
 		await this.transactionManager.runInTransaction(async () => {
 			const order = await this.createOrderUseCase.execute(createOrderRequest);
-
-			await this.orderCheckRepository.initialize(order.getId());
 
 			const [domainEvent] = order.getDomainEvents();
 			if (!domainEvent) return;
