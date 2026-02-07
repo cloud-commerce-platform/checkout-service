@@ -1,3 +1,4 @@
+import { CURRENT_EVENT_VERSION } from "@/infrastructure/events/EventVersion";
 import type { IncomingIntegrationEvent } from "@/infrastructure/events/IntegrationEvents";
 
 export interface NormalizedOrderEvent {
@@ -23,7 +24,7 @@ export class NormalizedEventMapper {
 			exchange: "order_processing",
 			routingKey: event.partition,
 			source: "event_router",
-			version: "1.0",
+			version: CURRENT_EVENT_VERSION,
 		};
 	}
 

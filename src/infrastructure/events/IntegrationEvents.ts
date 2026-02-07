@@ -10,7 +10,7 @@ export interface OutgoingIntegrationEvent<T = unknown> {
 	eventType: string;
 	payload: T;
 	correlationId?: string;
-	version: string;
+	version: number;
 	occurredAt: string;
 	exchange: string;
 	routingKey: string;
@@ -22,7 +22,7 @@ export interface IncomingIntegrationEvent<T extends IncomingEvents> {
 	eventType: string;
 	payload: T["data"];
 	correlationId?: string;
-	version: string;
+	version:number ;
 	occurredAt: string;
 	exchange: string;
 	routingKey: string;

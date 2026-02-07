@@ -2,6 +2,7 @@ import type { OrderDomainEvent } from "@alejotamayo28/event-contracts";
 import { v7 as uuid } from "uuid";
 import type { IntegrationEventMapper } from "@/application/ports/IntegrationEventMapper";
 import type { OutgoingIntegrationEvent } from "@/infrastructure/events/IntegrationEvents";
+import { CURRENT_EVENT_VERSION } from "./EventVersion";
 
 //to-do: Corregir esta monda (se guarda dentro de outbox)
 export class RabbitMQIntegrationEventMapper implements IntegrationEventMapper {
@@ -14,7 +15,7 @@ export class RabbitMQIntegrationEventMapper implements IntegrationEventMapper {
 			eventType: event.type,
 			payload: event.data,
 			correlationId: event.aggregateId,
-			version: "1.0",
+			version: CURRENT_EVENT_VERSION,
 			occurredAt: new Date().toISOString(),
 			exchange: mapping.exchange,
 			routingKey: mapping.routingKey,

@@ -24,7 +24,7 @@ export interface OutboxEventDbStructure {
 	event_type: string;
 	payload: string;
 	correlation_id?: string;
-	version: string;
+	version: number;
 	occurred_at: Date;
 	exchange: string;
 	routing_key: string;

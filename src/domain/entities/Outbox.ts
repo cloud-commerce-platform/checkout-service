@@ -7,7 +7,7 @@ export class Outbox extends Entity<DomainEvent> {
 		eventType: string,
 		payload: any,
 		correlationId: string | undefined,
-		version: string,
+		version: number,
 		occurredAt: Date,
 		exchange: string,
 		routingKey: string,
@@ -39,7 +39,7 @@ export class Outbox extends Entity<DomainEvent> {
 	private eventType: string;
 	private payload: unknown;
 	private correlationId?: string;
-	private version: string;
+	private version: number;
 	private occurredAt: Date;
 	private exchange: string;
 	private routingKey: string;
@@ -54,7 +54,7 @@ export class Outbox extends Entity<DomainEvent> {
 		eventType: string,
 		payload: unknown,
 		correlationId: string | undefined,
-		version: string,
+		version: number,
 		occurredAt: Date,
 		exchange: string,
 		routingKey: string,
@@ -92,7 +92,7 @@ export class Outbox extends Entity<DomainEvent> {
 		return this.correlationId;
 	}
 
-	public getVersion(): string {
+	public getVersion(): number {
 		return this.version;
 	}
 
