@@ -43,10 +43,10 @@ async function start() {
 				await useCase.execute();
 			});
 		} catch (err) {
-			console.error("❌ Outbox worker error:", err);
+			console.error("Outbox worker error:", err);
 
 			if (!messagingService.isConnected()) {
-				console.log("🔄 Attempting to reconnect to RabbitMQ...");
+				console.log("Attempting to reconnect to RabbitMQ...");
 				try {
 					await connectToRabbitMQ();
 				} catch (reconnectError) {

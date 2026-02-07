@@ -97,7 +97,6 @@ export const saveStructuresWithConflictKey = async (
 			})
 		);
 
-		console.log(sql);
 		await client.query(sql);
 	} catch (error) {
 		console.log(error);

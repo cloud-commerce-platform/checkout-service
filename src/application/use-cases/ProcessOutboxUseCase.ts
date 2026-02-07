@@ -17,6 +17,7 @@ export class ProcessOutboxUseCase {
 		for (const outbox of outboxes) {
 			try {
 				await this.publishOutbox(outbox);
+				console.log("Event Sent: ", outbox);
 				outbox.markAsProcessed();
 			} catch (error) {
 				const errorMessage = error instanceof Error ? error.message : "Unknown error";
