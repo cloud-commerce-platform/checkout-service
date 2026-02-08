@@ -1,9 +1,15 @@
 import { WorkerDependencies } from "@application/services/dependencies/WorkerDependencies";
 import type { MessageProcessingService } from "@application/services/MessageProcessingService";
+import * as os from "os";
 import { createClient } from "redis";
 import { RabbitMQMessagingService } from "../messaging/adapters/RabbitMQMessagingService";
 
 const WORKER_PREFETCH = 1;
+const hostname = os.hostname();
+const WORKER_PARTITION = hostname.includes("_")
+	? hostname.split("_")[1]
+	: process.env.WORKER_PARTITION || "1";
+const QUEUE_NAME = `worker_queue_${WORKER_PARTITION}`;
 
 class OrderProcessingWorker {
 	private messagingService!: RabbitMQMessagingService;
@@ -11,6 +17,10 @@ class OrderProcessingWorker {
 	private redisClient!: ReturnType<typeof createClient>;
 
 	async start(): Promise<void> {
+		console.log(
+			`🚀 Worker ${hostname} starting - Partition: ${WORKER_PARTITION} - Queue: ${QUEUE_NAME}`
+		);
+
 		this.redisClient = createClient({
 			url: process.env.REDIS_URL || "redis://localhost:6379",
 		});
@@ -26,7 +36,7 @@ class OrderProcessingWorker {
 		const channel = this.messagingService.getChannel();
 		if (!channel) throw new Error("CHANNEL_NOT_AVAILABLE");
 
-		await channel.consume("worker_queue", async (msg) => {
+		await channel.consume(QUEUE_NAME, async (msg) => {
 			if (!msg) return;
 
 			try {
@@ -37,11 +47,10 @@ class OrderProcessingWorker {
 					channel.ack(msg);
 				} else {
 					await this.sendToDLQ(event, "Processing failed");
-					channel.nack(msg, false, false); // No requeue -> DLQ
+					channel.nack(msg, false, false);
 				}
 			} catch (error) {
-				// Error retryable -> reencolar
-				channel.nack(msg, false, true); // Requeue -> NACK
+				channel.nack(msg, false, true);
 			}
 		});
 

@@ -1,7 +1,10 @@
 import type { MessagingService } from "@application/ports/MessagingService";
 
 export class EventRouterSetup {
-	constructor(private messagingService: MessagingService) {}
+	constructor(
+		private messagingService: MessagingService,
+		private partitionCount: number
+	) {}
 
 	async initialize(): Promise<void> {
 		await this.setupOrderProcessingExchange();
@@ -21,17 +24,25 @@ export class EventRouterSetup {
 			durable: true,
 		});
 
-		await this.messagingService.assertQueue("worker_queue", {
-			durable: true,
-			arguments: {
-				"x-dead-letter-exchange": "order_processing.dlq",
-				"x-dead-letter-routing-key": "worker.dlq",
-			},
-		});
+		if (this.partitionCount < 1) {
+			throw new Error("PARTITION_COUNT must be >= 1");
+		}
+
+		for (let i = 1; i <= this.partitionCount; i++) {
+			const queueName = `worker_queue_${i}`;
+			await this.messagingService.assertQueue(queueName, {
+				durable: true,
+				arguments: {
+					"x-dead-letter-exchange": "order_processing.dlq",
+					"x-dead-letter-routing-key": "worker.dlq",
+				},
+			});
+
+			// "1" peso del nodo en x-consistent-hash
+			await this.messagingService.bindQueue(queueName, "order_processing", "1");
+		}
 
 		await this.messagingService.assertQueue("worker_dlq", { durable: true });
-
-		await this.messagingService.bindQueue("worker_queue", "order_processing", "1");
 		await this.messagingService.bindQueue(
 			"worker_dlq",
 			"order_processing.dlq",

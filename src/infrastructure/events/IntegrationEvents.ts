@@ -22,7 +22,7 @@ export interface IncomingIntegrationEvent<T extends IncomingEvents> {
 	eventType: string;
 	payload: T["data"];
 	correlationId?: string;
-	version:number ;
+	version: number;
 	occurredAt: string;
 	exchange: string;
 	routingKey: string;

@@ -3,11 +3,18 @@ import { RoutingService } from "@application/services/RoutingService";
 import { RabbitMQMessagingService } from "../messaging/adapters/RabbitMQMessagingService";
 import { EventRouterSetup } from "../messaging/setup/EventRouterSetup";
 
+const PARTITION_COUNT = Number(process.env.PARTITION_COUNT) ?? 2;
+
+if (isNaN(PARTITION_COUNT) || PARTITION_COUNT < 1) {
+	console.error("PARTITION_COUNT must be a number >= 1");
+	process.exit(1);
+}
+
 async function startEventRouter() {
 	const messagingService = new RabbitMQMessagingService();
-	const setup = new EventRouterSetup(messagingService);
+	const setup = new EventRouterSetup(messagingService, PARTITION_COUNT);
 	const normalizationService = new EventNormalizationService();
-	const routingService = new RoutingService(1);
+	const routingService = new RoutingService(PARTITION_COUNT);
 
 	await messagingService.connect();
 	await setup.initialize();

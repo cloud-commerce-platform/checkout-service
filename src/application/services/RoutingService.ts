@@ -1,7 +1,7 @@
 export class RoutingService {
 	private partitionCount: number;
 
-	constructor(partitionCount: number = 1) {
+	constructor(partitionCount: number) {
 		this.partitionCount = partitionCount;
 	}
 
