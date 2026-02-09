@@ -9,6 +9,10 @@ import type { CreateOrderRequest } from "@/infrastructure/rest-api/controllers/O
 import type { OrderProcessManager } from "../order/OrderProcessManager";
 import type { EventRepository } from "../ports/EventRepository";
 import type { IntegrationEventMapper } from "../ports/IntegrationEventMapper";
+import type {
+	IntegrationCheckType,
+	IntegrationEventStatus,
+} from "../ports/IntegrationEventTypes";
 import type { OutboxRepository } from "../ports/OutboxRepository";
 import type { TransactionManager } from "../ports/TransactionManager";
 import type { CreateOrderUseCase } from "../use-cases/CreateOrderUseCase";
@@ -74,8 +78,8 @@ export class OrderService {
 
 	public async handleIntegrationEvent<T extends IncomingEvents>(
 		eventMessage: IncomingIntegrationEvent<T>,
-		checkType: "paymentCheck" | "inventoryCheck",
-		status: "pending" | "completed" | "failed"
+		checkType: IntegrationCheckType,
+		status: IntegrationEventStatus
 	): Promise<void> {
 		await this.orderProcessManager.handle<T>(eventMessage, checkType, status);
 	}

@@ -51,6 +51,7 @@ export class MessageProcessingService {
 			return await this.handleRetryableError(error, event);
 		}
 
+		console.log("Error: ", error);
 		console.log(`UNKNOWN_ERROR:${error.message}`);
 		return false; // -> DLQ
 	}

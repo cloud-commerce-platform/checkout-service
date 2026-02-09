@@ -86,5 +86,11 @@ export class EventRouterSetup {
 			"inventory_events",
 			"inventory.reservation.response"
 		);
+
+		await this.messagingService.bindQueue(
+			"event_router_inventory_queue",
+			"inventory_events",
+			"inventory.rollback.completed"
+		);
 	}
 }

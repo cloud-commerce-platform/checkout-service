@@ -1,14 +1,18 @@
+import type {
+	InventoryDomainEvent,
+	PaymentDomainEvent,
+} from "@alejotamayo28/event-contracts";
 import { CURRENT_EVENT_VERSION } from "@/infrastructure/events/EventVersion";
 import type { IncomingIntegrationEvent } from "@/infrastructure/events/IntegrationEvents";
+import type {
+	IntegrationCheckType,
+	IntegrationEventStatus,
+} from "../ports/IntegrationEventTypes";
 
 export interface NormalizedOrderEvent {
 	eventId: string;
 	orderId: string;
-	eventType:
-		| "PAYMENT_DEDUCTION_COMPLETED"
-		| "PAYMENT_DEDUCTION_FAILED"
-		| "INVENTORY_RESERVATION_COMPLETED"
-		| "INVENTORY_RESERVATION_FAILED";
+	eventType: InventoryDomainEvent["type"] | PaymentDomainEvent["type"];
 	originalEvent: any;
 	occurredAt: string;
 	partition: string;
@@ -28,13 +32,13 @@ export class NormalizedEventMapper {
 		};
 	}
 
-	extractCheckType(
-		eventType: NormalizedOrderEvent["eventType"]
-	): "paymentCheck" | "inventoryCheck" {
+	extractCheckType(eventType: NormalizedOrderEvent["eventType"]): IntegrationCheckType {
 		return eventType.startsWith("PAYMENT") ? "paymentCheck" : "inventoryCheck";
 	}
 
-	extractStatus(eventType: NormalizedOrderEvent["eventType"]): "completed" | "failed" {
+	extractStatus(
+		eventType: NormalizedOrderEvent["eventType"]
+	): Partial<IntegrationEventStatus> {
 		return eventType.endsWith("COMPLETED") ? "completed" : "failed";
 	}
 }

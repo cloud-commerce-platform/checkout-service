@@ -8,6 +8,10 @@ import type {
 } from "@/infrastructure/events/IntegrationEvents";
 import type { EventRepository } from "../ports/EventRepository";
 import type { IntegrationEventMapper } from "../ports/IntegrationEventMapper";
+import type {
+	IntegrationCheckType,
+	IntegrationEventStatus,
+} from "../ports/IntegrationEventTypes";
 import type { OutboxRepository } from "../ports/OutboxRepository";
 import type { TransactionManager } from "../ports/TransactionManager";
 import type { OrderProjection, OrderState } from "../projections/OrderProjection";
@@ -29,8 +33,8 @@ export class OrderProcessManager {
 
 	public async handle<T extends IncomingEvents>(
 		eventMessage: IncomingIntegrationEvent<T>,
-		checkType: "paymentCheck" | "inventoryCheck",
-		status: "pending" | "completed" | "failed"
+		checkType: IntegrationCheckType,
+		status: IntegrationEventStatus
 	): Promise<void> {
 		await this.transactionManager.runInTransaction(async () => {
 			await this.saveExternalEvent(eventMessage, checkType, status);
@@ -58,8 +62,8 @@ export class OrderProcessManager {
 
 	private async saveExternalEvent<T extends IncomingEvents>(
 		eventMessage: IncomingIntegrationEvent<T>,
-		checkType: "paymentCheck" | "inventoryCheck",
-		status: "pending" | "completed" | "failed"
+		checkType: IntegrationCheckType,
+		status: IntegrationEventStatus
 	): Promise<void> {
 		const orderId = eventMessage.payload.orderId;
 		const order = await this.orderRepository.findById(orderId);

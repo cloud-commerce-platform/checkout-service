@@ -55,24 +55,6 @@ services:
       order-redis:
         condition: service_healthy
 
-  order-api:
-    build: .
-    container_name: order-api
-    command: node dist/index.js
-    ports:
-      - "3000:3000"
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - RABBITMQ_HOST=rabbitmq
-      - REDIS_URL=redis://order-redis:6379
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-      order-redis:
-        condition: service_healthy
-      order-dbmate:
-        condition: service_completed_successfully
-
   order-worker-1:
     build: .
     container_name: order-worker-1
@@ -81,6 +63,7 @@ services:
       - WORKER_PARTITION=1
       - RABBITMQ_HOST=rabbitmq
       - REDIS_URL=redis://order-redis:6379
+      - DATABASE_URL=${DATABASE_URL}
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -97,6 +80,7 @@ services:
       - WORKER_PARTITION=2
       - RABBITMQ_HOST=rabbitmq
       - REDIS_URL=redis://order-redis:6379
+      - DATABASE_URL=${DATABASE_URL}
     depends_on:
       rabbitmq:
         condition: service_healthy
