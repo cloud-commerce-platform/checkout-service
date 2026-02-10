@@ -1,18 +1,10 @@
 import type { Order } from "@domain/entities/Order";
 import type { Event } from "@/domain/entities/Event";
 import { Outbox } from "@/domain/entities/Outbox";
-import type {
-	IncomingEvents,
-	IncomingIntegrationEvent,
-} from "@/infrastructure/events/IntegrationEvents";
 import type { CreateOrderRequest } from "@/infrastructure/rest-api/controllers/OrderController";
 import type { OrderProcessManager } from "../order/OrderProcessManager";
 import type { EventRepository } from "../ports/EventRepository";
 import type { IntegrationEventMapper } from "../ports/IntegrationEventMapper";
-import type {
-	IntegrationCheckType,
-	IntegrationEventStatus,
-} from "../ports/IntegrationEventTypes";
 import type { OutboxRepository } from "../ports/OutboxRepository";
 import type { TransactionManager } from "../ports/TransactionManager";
 import type { CreateOrderUseCase } from "../use-cases/CreateOrderUseCase";
@@ -74,13 +66,5 @@ export class OrderService {
 
 			order.clearDomainEvents();
 		});
-	}
-
-	public async handleIntegrationEvent<T extends IncomingEvents>(
-		eventMessage: IncomingIntegrationEvent<T>,
-		checkType: IntegrationCheckType,
-		status: IntegrationEventStatus
-	): Promise<void> {
-		await this.orderProcessManager.handle<T>(eventMessage, checkType, status);
 	}
 }

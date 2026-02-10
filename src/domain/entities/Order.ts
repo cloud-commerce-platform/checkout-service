@@ -6,7 +6,7 @@ import {
 import type {
 	InventoryStatus,
 	PaymentStatus,
-} from "@/application/order/OrderProcessManager";
+} from "@/application/projections/OrderProjection";
 import { type CancelContext, OrderEvents } from "../events/OrderEvents";
 import Entity from "./Entity";
 
@@ -155,6 +155,11 @@ export class Order extends Entity<OrderDomainEvent> {
 	public markInventoryReservationCompleted(): void {
 		this.wasUpdated = true;
 		this.addDomainEvent(OrderEvents.inventoryReservationCompleted(this));
+	}
+
+	public markInventoryRollbackCompleted(): void {
+		this.wasUpdated = true;
+		this.addDomainEvent(OrderEvents.compensationCompletd(this));
 	}
 
 	public needsPaymentRollback(

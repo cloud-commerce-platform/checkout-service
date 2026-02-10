@@ -3,12 +3,15 @@ import type { Order } from "@/domain/entities/Order";
 import type { OrderRepository } from "@/domain/repositories/OrderRepository";
 import type { EventRepository } from "../ports/EventRepository";
 
+export type PaymentStatus = "pending" | "approved" | "rejected";
+export type InventoryStatus = "pending" | "reserved" | "unavailable";
+
 export interface OrderState {
 	orderId: string;
 	customerId?: string;
 	status: "PENDING" | "CONFIRMED" | "CANCELLED" | "COMPLETED";
-	payment: "pending" | "approved" | "rejected";
-	inventory: "pending" | "reserved" | "unavailable";
+	payment: PaymentStatus;
+	inventory: InventoryStatus;
 	paymentReason?: string | null;
 	inventoryReason?: string | null;
 	createdAt: Date;
@@ -80,6 +83,11 @@ export class OrderProjection {
 
 			case "ORDER_PAYMENT_DEDUCTION_COMPLETED":
 				state.payment = "approved";
+				break;
+
+			case "ORDER_INVENTORY_ROLLBACK_COMPLETED":
+				// Inventory rollback completado - no cambiamos el estado de inventory
+				// pero podríamos agregar un campo adicional si es necesario
 				break;
 
 			case "ORDER_CONFIRMED":

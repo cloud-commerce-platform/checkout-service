@@ -3,7 +3,7 @@ import { RoutingService } from "@application/services/RoutingService";
 import { RabbitMQMessagingService } from "../messaging/adapters/RabbitMQMessagingService";
 import { EventRouterSetup } from "../messaging/setup/EventRouterSetup";
 
-const PARTITION_COUNT = Number(process.env.PARTITION_COUNT) ?? 2;
+const PARTITION_COUNT = Number(process.env.PARTITION_COUNT) || 2;
 
 if (isNaN(PARTITION_COUNT) || PARTITION_COUNT < 1) {
 	console.error("PARTITION_COUNT must be a number >= 1");

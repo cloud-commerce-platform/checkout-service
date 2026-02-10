@@ -6,7 +6,7 @@ import type {
 import type {
 	InventoryStatus,
 	PaymentStatus,
-} from "@/application/order/OrderProcessManager";
+} from "@/application/projections/OrderProjection";
 import type { Order } from "../entities/Order";
 
 export type CancelContext = {
@@ -218,5 +218,17 @@ export class OrderEvents {
 		}
 
 		return events;
+	}
+
+	static compensationCompletd(order: Order): OrderDomainEvent {
+		return {
+			type: "ORDER_COMPENSATION_COMPLETED",
+			timestamp: new Date(),
+			aggregateId: order.getId(),
+			aggregateType: "Order",
+			data: {
+				orderId: order.getId(),
+			},
+		};
 	}
 }

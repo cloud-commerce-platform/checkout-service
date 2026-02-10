@@ -1,17 +1,18 @@
+import type { InventoryEventConsumer } from "@application/consumers/InventoryEventConsumer";
+import type { PaymentEventConsumer } from "@application/consumers/PaymentEventConsumer";
 import type {
 	NormalizedEventMapper,
 	NormalizedOrderEvent,
 } from "@application/mappers/NormalizedEventMapper";
 import type { DuplicateChecker } from "@application/ports/DuplicateChecker";
 import type { RetryManager } from "@application/ports/RetryManager";
-import type { OrderService } from "@application/services/OrderService";
-import { DomainError } from "@domain/errors/DomainError";
 
 export class MessageProcessingService {
 	constructor(
 		private duplicateChecker: DuplicateChecker,
 		private retryManager: RetryManager,
-		private orderService: OrderService,
+		private inventoryEventConsumer: InventoryEventConsumer,
+		private paymentEventConsumer: PaymentEventConsumer,
 		private eventMapper: NormalizedEventMapper,
 		private maxRetries: number = 3
 	) {}
@@ -25,13 +26,20 @@ export class MessageProcessingService {
 
 		try {
 			const integrationEvent = this.eventMapper.toIncomingIntegrationEvent(event);
-			const checkType = this.eventMapper.extractCheckType(event.eventType);
-			const status = this.eventMapper.extractStatus(event.eventType);
 
-			await this.orderService.handleIntegrationEvent(integrationEvent, checkType, status);
+			const eventType = event.eventType;
+
+			if (eventType.startsWith("INVENTORY_")) {
+				await this.inventoryEventConsumer.process(integrationEvent);
+			} else if (eventType.startsWith("PAYMENT_")) {
+				await this.paymentEventConsumer.process(integrationEvent);
+			} else {
+				throw new Error(`UNKNOWN_EVENT_TYPE:${eventType}`);
+			}
 
 			await this.duplicateChecker.markAsProcessed(event.eventId);
 			await this.retryManager.clearRetry(event.orderId, event.eventType);
+
 			return true; // -> ACK
 		} catch (error) {
 			return await this.handleError(error as Error, event);
@@ -39,20 +47,21 @@ export class MessageProcessingService {
 	}
 
 	private async handleError(error: Error, event: NormalizedOrderEvent): Promise<boolean> {
-		if (error instanceof DomainError) {
-			if (!error.retryable) {
-				console.log(`PERMANENT_ERROR:${error.code}`);
-				return false;
-			}
-			return await this.handleRetryableError(error, event);
+		if (
+			error.message.includes("CANNOT_TRANSITION") ||
+			error.message.includes("ORDER_NOT_FOUND") ||
+			error.message.includes("NO_STATE_FOUND")
+		) {
+			console.log(`PERMANENT_ERROR:${error.message}`);
+			return false; // -> DLQ
 		}
 
 		if (this.isConnectionError(error)) {
 			return await this.handleRetryableError(error, event);
 		}
 
-		console.log("Error: ", error);
-		console.log(`UNKNOWN_ERROR:${error.message}`);
+		// Otros errores desconocidos
+		console.error(`UNKNOWN_ERROR:${error.message}`);
 		return false; // -> DLQ
 	}
 
@@ -77,7 +86,6 @@ export class MessageProcessingService {
 		);
 		console.log(`RETRYING:${newCount}/${this.maxRetries}:${error.message}`);
 
-		// Lanzar excepción, worker -> NACK con requeue
 		throw new Error(`RETRY:${event.orderId}:${event.eventType}`);
 	}
 

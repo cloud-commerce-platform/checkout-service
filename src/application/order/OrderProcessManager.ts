@@ -1,3 +1,10 @@
+import type {
+	InventoryReservedEvent,
+	InventoryRollbackCompletedEvent,
+	InventoryUnavailableEvent,
+	PaymentDeductedCompletedEvent,
+	PaymentDeductedFailedEvent,
+} from "@alejotamayo28/event-contracts";
 import { type CancellationReason, OrderStatus } from "@alejotamayo28/event-contracts";
 import type { Order } from "@/domain/entities/Order";
 import { Outbox } from "@/domain/entities/Outbox";
@@ -8,20 +15,11 @@ import type {
 } from "@/infrastructure/events/IntegrationEvents";
 import type { EventRepository } from "../ports/EventRepository";
 import type { IntegrationEventMapper } from "../ports/IntegrationEventMapper";
-import type {
-	IntegrationCheckType,
-	IntegrationEventStatus,
-} from "../ports/IntegrationEventTypes";
 import type { OutboxRepository } from "../ports/OutboxRepository";
 import type { TransactionManager } from "../ports/TransactionManager";
 import type { OrderProjection, OrderState } from "../projections/OrderProjection";
 
-export type PaymentStatus = "pending" | "approved" | "rejected";
-export type InventoryStatus = "pending" | "reserved" | "unavailable";
-
 export class OrderProcessManager {
-	private static readonly ORDER_TIMEOUT_MS = 60_000;
-
 	constructor(
 		private readonly orderRepository: OrderRepository,
 		private readonly orderProjection: OrderProjection,
@@ -31,75 +29,65 @@ export class OrderProcessManager {
 		private readonly eventRepository: EventRepository
 	) {}
 
-	public async handle<T extends IncomingEvents>(
-		eventMessage: IncomingIntegrationEvent<T>,
-		checkType: IntegrationCheckType,
-		status: IntegrationEventStatus
+	async handleInventoryReservationCompleted(
+		message: IncomingIntegrationEvent<InventoryReservedEvent>
 	): Promise<void> {
-		await this.transactionManager.runInTransaction(async () => {
-			await this.saveExternalEvent(eventMessage, checkType, status);
-
-			const orderId = eventMessage.payload.orderId;
-			const state = await this.orderProjection.reconstruct(orderId);
-
-			if (!state) {
-				throw new Error(`NO_STATE_FOUND_FOR_ORDER_${orderId}`);
-			}
-
-			const order = await this.orderRepository.findById(orderId);
-			if (!order) {
-				throw new Error(`ORDER_NOT_FOUND_${orderId}`);
-			}
-
-			await this.applyBusinessLogic(order, state);
-			await this.appendDomainEvents(order);
-			await this.orderProjection.update(order);
-			await this.createOutboxEntries(order);
-
-			order.clearDomainEvents();
+		return this.processEvent(message, async (order, state) => {
+			order.markInventoryReservationCompleted();
+			state.inventory = "reserved";
+			state.hasPending = state.payment === "pending";
+			await this.evaluateOrderCompletion(order, state);
 		});
 	}
 
-	private async saveExternalEvent<T extends IncomingEvents>(
-		eventMessage: IncomingIntegrationEvent<T>,
-		checkType: IntegrationCheckType,
-		status: IntegrationEventStatus
+	async handleInventoryReservationFailed(
+		message: IncomingIntegrationEvent<InventoryUnavailableEvent>
 	): Promise<void> {
-		const orderId = eventMessage.payload.orderId;
-		const order = await this.orderRepository.findById(orderId);
-
-		if (!order) {
-			throw new Error(`ORDER_NOT_FOUND_${orderId}`);
-		}
-
-		if (checkType === "paymentCheck") {
-			if (status === "completed") {
-				order.markPaymentDeductionCompleted();
-			} else if (status === "failed") {
-				const reason = this.extractReasonFromPayload(eventMessage);
-				order.markPaymentVerificationFailed(reason);
-			}
-		} else {
-			if (status === "completed") {
-				order.markInventoryReservationCompleted();
-			} else if (status === "failed") {
-				const reason = this.extractReasonFromPayload(eventMessage);
-				order.markInventoryReservationFailed(reason);
-			}
-		}
-
-		const lastEvent = await this.eventRepository.getLastVersion(orderId);
-		const lastVersion = lastEvent?.getVersion() ?? 0;
-		await this.eventRepository.append(order, lastVersion);
-
-		order.clearDomainEvents();
+		return this.processEvent(message, async (order, state) => {
+			const reason = this.extractReasonFromPayload(message);
+			order.markInventoryReservationFailed(reason);
+			state.inventory = "unavailable";
+			state.inventoryReason = reason;
+			state.hasPending = state.payment === "pending";
+			await this.evaluateOrderCompletion(order, state);
+		});
 	}
 
-	private async applyBusinessLogic(order: Order, state: OrderState): Promise<void> {
+	async handleInventoryRollbackCompleted(
+		message: IncomingIntegrationEvent<InventoryRollbackCompletedEvent>
+	): Promise<void> {
+		return this.processEvent(message, async (order, _state) => {
+			order.markInventoryRollbackCompleted();
+			order.transitionTo(OrderStatus.COMPENSATED);
+		});
+	}
+
+	async handlePaymentDeductedCompleted(
+		message: IncomingIntegrationEvent<PaymentDeductedCompletedEvent>
+	): Promise<void> {
+		return this.processEvent(message, async (order, state) => {
+			order.markPaymentDeductionCompleted();
+			state.payment = "approved";
+			state.hasPending = state.inventory === "pending";
+			await this.evaluateOrderCompletion(order, state);
+		});
+	}
+
+	async handlePaymentDeductedFailed(
+		message: IncomingIntegrationEvent<PaymentDeductedFailedEvent>
+	): Promise<void> {
+		return this.processEvent(message, async (order, state) => {
+			const reason = this.extractReasonFromPayload(message);
+			order.markPaymentVerificationFailed(reason);
+			state.payment = "rejected";
+			state.paymentReason = reason;
+			state.hasPending = state.inventory === "pending";
+			await this.evaluateOrderCompletion(order, state);
+		});
+	}
+
+	private async evaluateOrderCompletion(order: Order, state: OrderState): Promise<void> {
 		if (state.hasPending) {
-			if (this.isOrderStale(state)) {
-				this.applyTimeout(order, state);
-			}
 			return;
 		}
 
@@ -115,15 +103,46 @@ export class OrderProcessManager {
 		}
 	}
 
-	private async appendDomainEvents(order: Order): Promise<void> {
-		if (order.getDomainEvents().length === 0) {
+	private async processEvent<T extends IncomingEvents>(
+		message: IncomingIntegrationEvent<T>,
+		eventLogic: (order: Order, state: OrderState) => Promise<void>
+	): Promise<void> {
+		await this.transactionManager.runInTransaction(async () => {
+			const order = await this.loadOrder(message.payload.orderId);
+
+			const state = await this.orderProjection.reconstruct(order.getId());
+			if (!state) {
+				throw new Error(`NO_STATE_FOUND_FOR_ORDER_${order.getId()}`);
+			}
+
+			await eventLogic(order, state);
+			await this.persistAllChanges(order);
+		});
+	}
+
+	private async loadOrder(orderId: string): Promise<Order> {
+		const order = await this.orderRepository.findById(orderId);
+		if (!order) {
+			throw new Error(`ORDER_NOT_FOUND_${orderId}`);
+		}
+		return order;
+	}
+
+	private async persistAllChanges(order: Order): Promise<void> {
+		const domainEvents = order.getDomainEvents();
+		if (domainEvents.length === 0) {
 			return;
 		}
 
 		const lastEvent = await this.eventRepository.getLastVersion(order.getId());
 		const lastVersion = lastEvent?.getVersion() ?? 0;
-
 		await this.eventRepository.append(order, lastVersion);
+
+		await this.orderProjection.update(order);
+
+		await this.createOutboxEntries(order);
+
+		order.clearDomainEvents();
 	}
 
 	private async createOutboxEntries(order: Order): Promise<void> {
@@ -157,17 +176,11 @@ export class OrderProcessManager {
 		await this.outboxRepository.saveMany(outboxes);
 	}
 
-	private isOrderStale(state: OrderState): boolean {
-		return Date.now() - state.createdAt.getTime() >= OrderProcessManager.ORDER_TIMEOUT_MS;
-	}
-
-	private applyTimeout(order: Order, state: OrderState): void {
-		if (state.payment === "pending") {
-			order.markPaymentVerificationFailed("TIMEOUT");
-		}
-		if (state.inventory === "pending") {
-			order.markInventoryReservationFailed("TIMEOUT");
-		}
+	private extractReasonFromPayload<T extends IncomingEvents>(
+		message: IncomingIntegrationEvent<T>
+	): string {
+		const payload = message.payload as any;
+		return payload?.reason || payload?.error || "UNKNOWN_REASON";
 	}
 
 	private reconstructCancellationReasons(
@@ -181,12 +194,5 @@ export class OrderProcessManager {
 		if (inventoryReason) {
 			order.addCancellationReasons(inventoryReason);
 		}
-	}
-
-	private extractReasonFromPayload<T extends IncomingEvents>(
-		eventMessage: IncomingIntegrationEvent<T>
-	): string {
-		const payload = eventMessage.payload as any;
-		return payload?.reason || payload?.error || "UNKNOWN_REASON";
 	}
 }

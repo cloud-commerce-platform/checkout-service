@@ -1,7 +1,8 @@
+import { InventoryEventConsumer } from "@application/consumers/InventoryEventConsumer";
+import { PaymentEventConsumer } from "@application/consumers/PaymentEventConsumer";
 import { NormalizedEventMapper } from "@application/mappers/NormalizedEventMapper";
 import { OrderProcessManager } from "@application/order/OrderProcessManager";
 import { OrderProjection } from "@application/projections/OrderProjection";
-import { OrderService } from "@application/services/OrderService";
 import { PostgresTransactionManager } from "@infrastructure/data-access/postgres/PostgresTransactionManager";
 import { PostgreEventRepository } from "@infrastructure/data-access/postgres/repositories/PostgreEventRepository";
 import { PostgreOrderRepository } from "@infrastructure/data-access/postgres/repositories/PostgreOrderRepository";
@@ -35,28 +36,20 @@ export class WorkerDependencies {
 			eventRepository
 		);
 
-		// Order Service
-		const orderService = new OrderService(
-			{} as any,
-			{} as any,
-			{} as any,
-			orderProcessManager,
-			postgresTransactionManager,
-			outboxRepository,
-			integrationEventMapper,
-			eventRepository,
-			{} as any
-		);
-
 		// Redis-based services
 		const duplicateChecker = new RedisDuplicateChecker(this.redisClient);
 		const retryManager = new RedisRetryManager(this.redisClient);
 		const eventMapper = new NormalizedEventMapper();
 
+		// Consumers (solo reciben OrderProcessManager)
+		const inventoryEventConsumer = new InventoryEventConsumer(orderProcessManager);
+		const paymentEventConsumer = new PaymentEventConsumer(orderProcessManager);
+
 		return new MessageProcessingService(
 			duplicateChecker,
 			retryManager,
-			orderService,
+			inventoryEventConsumer,
+			paymentEventConsumer,
 			eventMapper
 		);
 	}

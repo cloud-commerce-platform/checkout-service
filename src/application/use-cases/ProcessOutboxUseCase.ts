@@ -17,12 +17,12 @@ export class ProcessOutboxUseCase {
 		for (const outbox of outboxes) {
 			try {
 				await this.publishOutbox(outbox);
-				console.log("Event Sent: ", outbox);
+				console.log(`Event Sent: ${outbox.getId()} ${outbox.getEventType()}`);
 				outbox.markAsProcessed();
 			} catch (error) {
 				const errorMessage = error instanceof Error ? error.message : "Unknown error";
 				console.error(
-					`❌ Failed to process outbox ${outbox.getEventId()}: ${errorMessage}`
+					`Failed to process outbox ${outbox.getEventId()}: ${errorMessage}`
 				);
 				outbox.incrementRetry(errorMessage);
 			}

@@ -74,6 +74,10 @@ export class RabbitMQIntegrationEventMapper implements IntegrationEventMapper {
 				exchange: "order_events",
 				routingKey: "status.compensation.started",
 			},
+			ORDER_COMPENSATION_COMPLETED: {
+				exchange: "order_events",
+				routingKey: "status.compensation.completed",
+			},
 		};
 
 		return mappings[event.type] ?? null;

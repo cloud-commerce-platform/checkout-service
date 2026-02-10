@@ -20,7 +20,8 @@
     "worker": "node dist/infrastructure/workers/worker.js",
     "dev:router": "ts-node -r tsconfig-paths/register src/infrastructure/workers/router.ts",
     "dev:worker": "ts-node -r tsconfig-paths/register src/infrastructure/workers/worker.ts",
-    "start:all": "concurrently \"npm run dev\" \"npm run dev:router\" \"npm run dev:worker\" \"npm run outbox-worker\""
+    "start:all": "concurrently \"npm run dev:router\" \"sleep 5 && npm run dev\" \"sleep 6 && WORKER_PARTITION=1 npm run dev:worker\" \"sleep 7 && WORKER_PARTITION=2 npm run dev:worker\" \"sleep 8 && npm run outbox-worker\"",
+    "infra:up": "docker compose up -d rabbitmq order-redis"
   },
   "keywords": [
     "typescript",

@@ -1,61 +1,52 @@
 import type {
 	InventoryDomainEvent,
 	InventoryReservedEvent,
+	InventoryRollbackCompletedEvent,
+	InventoryRollbackFailedEvent,
 	InventoryUnavailableEvent,
 } from "@alejotamayo28/event-contracts";
+import type { OrderProcessManager } from "@/application/order/OrderProcessManager";
 import type { IncomingIntegrationEvent } from "@/infrastructure/events/IntegrationEvents";
-import { BaseEventConsumer } from "./BaseEventConsumer";
 
-export class InventoryEventConsumer extends BaseEventConsumer {
-	protected setupEventListeners(): void {
-		const { exchange, queue, routingKey } = this.setUpEventConfig(
-			"inventory_events",
-			"order_service_inventory_queue",
-			["inventory.reservation.response"]
-		);
+export class InventoryEventConsumer {
+	constructor(private readonly orderProcessManager: OrderProcessManager) {}
 
-		this.messagingService.subscribe(
-			exchange,
-			queue,
-			routingKey,
-			async (message: IncomingIntegrationEvent<InventoryDomainEvent>) => {
-				try {
-					switch (message.eventType as InventoryDomainEvent["type"]) {
-						case "INVENTORY_RESERVATION_COMPLETED":
-							await this.handleReservationConfirmed(
-								message as IncomingIntegrationEvent<InventoryReservedEvent>
-							);
-							break;
+	async process(message: IncomingIntegrationEvent<InventoryDomainEvent>): Promise<void> {
+		switch (message.eventType as InventoryDomainEvent["type"]) {
+			case "INVENTORY_RESERVATION_COMPLETED":
+				await this.orderProcessManager.handleInventoryReservationCompleted(
+					message as IncomingIntegrationEvent<InventoryReservedEvent>
+				);
+				break;
 
-						case "INVENTORY_RESERVATION_FAILED":
-							await this.handleReservationFailed(
-								message as IncomingIntegrationEvent<InventoryUnavailableEvent>
-							);
-							break;
+			case "INVENTORY_RESERVATION_FAILED":
+				await this.orderProcessManager.handleInventoryReservationFailed(
+					message as IncomingIntegrationEvent<InventoryUnavailableEvent>
+				);
+				break;
 
-						default:
-							throw new Error(`UNKOWN_EVENT_TYPE:${message.eventType}`);
-					}
-				} catch (error) {
-					console.error("Error processing inventory event:", error);
-				}
-			}
-		);
+			case "INVENTORY_ROLLBACK_COMPLETED":
+				await this.orderProcessManager.handleInventoryRollbackCompleted(
+					message as IncomingIntegrationEvent<InventoryRollbackCompletedEvent>
+				);
+				break;
+
+			case "INVENTORY_ROLLBACK_FAILED":
+				await this.handleInventoryRollbackFailed(
+					message as IncomingIntegrationEvent<InventoryRollbackFailedEvent>
+				);
+				break;
+
+			default:
+				throw new Error(`UNKNOWN_INVENTORY_EVENT_TYPE:${message.eventType}`);
+		}
 	}
 
-	private async handleReservationConfirmed(
-		message: IncomingIntegrationEvent<InventoryReservedEvent>
+	private async handleInventoryRollbackFailed(
+		message: IncomingIntegrationEvent<InventoryRollbackFailedEvent>
 	): Promise<void> {
-		await this.orderService.handleIntegrationEvent<InventoryReservedEvent>(
-			message,
-			"inventoryCheck",
-			"completed"
-		);
-	}
-
-	private async handleReservationFailed(
-		message: IncomingIntegrationEvent<InventoryUnavailableEvent>
-	): Promise<void> {
-		await this.orderService.handleIntegrationEvent(message, "inventoryCheck", "failed");
+		// Por ahora, el rollback fallido no requiere acción especial
+		// podríamos loggear o enviar alerta
+		console.error(`INVENTORY_ROLLBACK_FAILED for order ${message.payload.orderId}:`);
 	}
 }
